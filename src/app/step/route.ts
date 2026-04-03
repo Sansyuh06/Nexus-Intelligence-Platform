@@ -1,15 +1,21 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(req: Request) {
-    try {
-        const body = await req.json().catch(() => ({}));
-        return NextResponse.json({
-            observation: "Analysis step completed successfully.",
-            reward: 1.0,
-            done: true,
-            info: { received_action: body }
-        });
-    } catch (e) {
-        return NextResponse.json({ error: "Invalid step request" }, { status: 400 });
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const response = await fetch('http://localhost:8000/step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      return NextResponse.json({ error: err }, { status: response.status });
     }
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('Error proxying /step to FastAPI:', error);
+    return NextResponse.json({ error: 'FastAPI unavailable' }, { status: 502 });
+  }
 }
