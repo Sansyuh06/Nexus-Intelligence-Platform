@@ -79,7 +79,7 @@ flowchart TB
             HF_API((Hugging Face Hub Router)) ==>|Payload Delivery| LLM[Qwen-2.5-72B-Instruct]
             
             LLM -.->|Visual SAST Payload| Dash
-            LLM -.->|Logs [START] [STEP] [END]| Inf
+            LLM -.->|"Logs [START] [STEP] [END]"| Inf
         end
     end
 
