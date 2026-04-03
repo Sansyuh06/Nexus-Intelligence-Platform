@@ -34,35 +34,48 @@ Most AI environments are simple puzzle games like Wordle. **Nexus Intelligence**
 Our architecture bridges complex machine learning with modern web deployment. Here is exactly how the platform operates under the hood:
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    
-    actor Human as 👤 Security Engineer
-    participant UI as 💻 Next.js Visual Dashboard
-    participant API as 🛡️ FastAPI (OpenEnv Engine)
-    participant Agent as 🤖 Qwen / LLM Agent
-    participant DB as 📂 CVE Fixture Database
-    
-    Note over Human,UI: Phase 1: Human Interactive Mode
-    Human->>UI: Inputs GitHub repo URL for scanning
-    UI->>Agent: Proxies source code via HF Serverless API
-    Agent-->>UI: Returns JSON Vulnerability Map
-    UI-->>Human: Renders interactive Threat Dashboard
-    
-    Note over API,DB: Phase 2: Autonomous RL Training Mode
-    API->>DB: Loads Complex Exploit (e.g., Log4Shell)
-    API->>Agent: Environment Reset (Prompts the Task)
-    
-    loop Sequential Investigation
-        Agent->>API: Calls /step (Action: Search NVD Database)
-        API-->>Agent: Returns Tool Result (Observation)
-        Agent->>API: Calls /step (Action: Extract Version)
-        API-->>Agent: Returns Extracted Log JSON (Observation)
+flowchart TB
+    %% Premium Styling Definitions
+    classDef ai fill:#0f172a,stroke:#60a5fa,stroke-width:2px,color:#f8fafc,rx:5,ry:5
+    classDef logic fill:#1e1b4b,stroke:#c084fc,stroke-width:2px,color:#f8fafc,rx:5,ry:5
+    classDef ui fill:#022c22,stroke:#34d399,stroke-width:2px,color:#f8fafc,rx:5,ry:5
+    classDef data fill:#450a0a,stroke:#ef4444,stroke-width:2px,color:#f8fafc,rx:5,ry:5
+
+    subgraph Core [Nexus Security Dual-Mode Architecture]
+        direction TB
+        
+        %% User Dashboard
+        subgraph Mode_1 [Mode 1: 💻 Interactive Security Sandbox]
+            direction LR
+            User([👤 Human Engineer]) ==>|Submits GitHub URL| Dash[Next.js Visual Platform]
+            Dash ==>|Initiates Cloud Scanner| HF_API
+        end
+
+        %% RL Training Backbone
+        subgraph Mode_2 [Mode 2: 🔄 Autonomous DevSecOps Training]
+            direction LR
+            Inf[python inference.py] -.->|API call: /reset| Setup[Load CVE Fixtures]
+            Setup -.->|Initial Observation| Inf
+            
+            Inf ==>|Standardized Actions| Step[FastAPI /step Endpoint]
+            Step ==>|Evaluation| RuleEngine{Deterministic Grader}
+            RuleEngine -.->|Observation + Reward| Inf
+        end
+
+        %% Central Inference
+        subgraph Cloud [🤗 Hugging Face Serverless Core]
+            direction LR
+            HF_API((API: router.huggingface.co/v1)) ==>|Payload Delivery| LLM[Qwen-2.5-72B-Instruct]
+            
+            LLM -.->|Parses Raw Source| Dash
+            LLM -.->|Logs [START] [STEP] [END]| Inf
+        end
     end
-    
-    Agent->>API: Final Action: `submit` (GAV Coordinates)
-    API->>API: Grader Evaluates JSON
-    API-->>Agent: Returns Final Scalar Reward (e.g., +1.0)
+
+    %% Apply Styles
+    class Mode_1,User,Dash ui
+    class Mode_2,Inf,Setup,Step,RuleEngine logic
+    class Cloud,HF_API,LLM ai
 ```
 
 ---
