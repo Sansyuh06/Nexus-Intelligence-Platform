@@ -1,9 +1,9 @@
-name: github-vuln-scanner
+name: cve-triage-env
 version: "1.0.0"
 type: space
-runtime: nodejs
-app: npm start
-port: 7860
+runtime: python
+app: server.app:app
+port: 8000
 description: >
   Real-world DevSecOps triage environment where AI agents
   investigate CVE IDs to extract GAV metadata and identify
@@ -18,26 +18,6 @@ tasks:
     name: Method Discovery
     difficulty: medium
     cve_id: CVE-2021-44228
-    max_steps: 8
-  - id: hard
-    name: Invocation Check
-    difficulty: hard
-    cve_id: CVE-2022-22965
-    max_steps: 12
-action_space:
-  types:
-    - search_nvd
-    - fetch_advisory
-    - lookup_gav
-    - search_method
-    - scan_code
-    - submit
-observation_type: json
-reward_range: [0.0, 1.0]
-api:
-  reset: "POST /reset"
-  step: "POST /step"
-  state: "GET /state"
     max_steps: 8
   - id: hard
     name: Invocation Check

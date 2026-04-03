@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    let body = {};
+    const text = await request.text();
+    if (text) {
+      body = JSON.parse(text);
+    }
     const response = await fetch('http://localhost:8000/reset', {
       method: 'POST',
       headers: {

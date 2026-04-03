@@ -98,7 +98,7 @@ class CVETriageEnv:
         else:
             # Partial step signal: useful data → +0.05, error → -0.05
             has_error = "error" in output
-            partial = 0.0 if has_error else 0.05
+            partial = -0.05 if has_error else 0.05
             reward = CVEReward(
                 value=partial,
                 breakdown={"step_signal": partial},
