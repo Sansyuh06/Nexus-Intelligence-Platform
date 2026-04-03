@@ -2,9 +2,7 @@
 
 echo "Starting servers..."
 
-# Activate virtual environment
-source /opt/venv/bin/activate
-echo "Virtual environment activated"
+# Virtual environment is already in PATH from Dockerfile
 
 # Start FastAPI server in background
 echo "Starting FastAPI on port 8000..."
