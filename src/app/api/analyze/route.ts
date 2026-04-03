@@ -14,8 +14,8 @@ type FileNode = {
 };
 
 // Model fallback chain — if one model is rate-limited, try the next
-// Used latest and lite versions to prevent 404s on specific API versions
-const MODEL_CHAIN = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest'];
+// Used latest, lite, and 1.0 versions to maximize the chance of finding an open quota bucket
+const MODEL_CHAIN = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest', 'gemini-1.0-pro'];
 
 async function callGeminiWithRetry(prompt: string, apiKey: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
