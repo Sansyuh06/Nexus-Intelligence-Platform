@@ -7,35 +7,66 @@ sdk: docker
 pinned: false
 ---
 
-# 🛡️ Nexus Intelligence Platform
+# 🛡️ Nexus Intelligence Platform - OpenEnv RL Environment
 
-> **Full-spectrum security auditing powered by Gemini AI.**
+> **A real-world Cybersecurity Environment designed for Reinforcement Learning (RL) training of LLM Agents, powered by OpenEnv and Gemini.**
 
-Nexus Intelligence Platform is a next-generation security analysis tool designed to streamline vulnerability detection for developers and security teams. Built for modern DevOps workflows, it seamlessly combines Static Application Security Testing (SAST) and Dynamic Application Security Testing (DAST) into a single, unified dashboard.
+Nexus Intelligence Platform is a next-generation security analysis environment. Built specifically for the **Meta PyTorch OpenEnv Hackathon**, this project solves the critical need for real-world, complex training grounds for AI agents. It provides a highly dynamic ecosystem where an LLM is trained to act as an autonomous AppSec engineer—detecting vulnerabilities across codebases and live applications via a standardized Action/Observation loop.
 
-## ✨ Key Features
+## 🏗️ Architecture & RL Workflow Diagram
 
-- **🧠 Gemini-Powered Analysis**: Leverages Google's advanced Gemini AI to deeply understand code context, minimizing false positives and providing actionable remediation steps.
-- **🔍 GitHub SAST (Static Analysis)**: Instantly analyze source code from any public GitHub repository. Detects hardcoded secrets, injection flaws, insecure dependencies, and architectural vulnerabilities before they hit production.
-- **🌐 Cloud DAST (Dynamic Analysis)**: Probe live cloud applications and APIs for dynamic vulnerabilities. Evaluates runtime behavior, misconfigurations, and authentication weaknesses.
-- **📊 Unified Dashboard**: View all your security posture metrics, detailed vulnerability reports, and remediation advice in a clean, intuitive, and highly responsive interface.
-- **⚡ Real-time Feedback**: Get rapid security insights to fix issues as you code, accelerating the secure software development lifecycle (SSDLC).
-- **🛡️ Rate-Limit Resilient**: Built with robust retry-and-fallback mechanisms to ensure continuous analysis even under heavy API load.
+This project features a dual-layer architecture:
+1. **The RL Training Environment:** A fully OpenEnv-compliant backend (`inference.py` and REST API stubs) that accepts standard Actions and returns structured Observations and scalar Rewards to the learning agent.
+2. **The Visual Demonstration Dashboard:** A sleek Next.js UI that visualizes the agent's thought process and vulnerability analysis for human evaluation.
+
+```mermaid
+graph TD
+    subgraph Agent Loop [Reinforcement Learning Cycle]
+        A[🤖 LLM Security Agent] -->|Action: Submit Code/URL| B(OpenEnv API `/step`)
+        B -->|Environment Evaluation| C{Vulnerability Scanner Engine}
+        C -->|Success/Failure Metrics| D[Calculate Scalar Reward]
+        D -->|Observation + Reward| A
+    end
+
+    subgraph Environment Core [Nexus Intelligence]
+        C -->|Static Analysis| E[GitHub SAST Check]
+        C -->|Dynamic Analysis| F[Live App DAST Probe]
+        E --> G[(Vulnerability DB / Models)]
+        F --> G
+    end
+
+    subgraph Human Interface
+        H[👤 Human Reviewer] -->|Access| I[Next.js Visual Dashboard]
+        I -->|Triggers Demo Eval| C
+    end
+
+    classDef primary fill:#4f46e5,stroke:#312e81,stroke-width:2px,color:#fff;
+    classDef secondary fill:#9333ea,stroke:#581c87,stroke-width:2px,color:#fff;
+    classDef env fill:#1e1b4b,stroke:#a855f7,stroke-width:2px,color:#fff;
+    
+    class A,B primary;
+    class C,D secondary;
+    class E,F,G env;
+```
+
+## ✨ Key Hackathon Priorities Mastered
+
+- **🧠 OpenEnv Compatibility**: Features `inference.py` at the root using the standard `OpenAI` client initialization (`API_BASE_URL`, `MODEL_NAME`, `HF_TOKEN`). It implements the required `START / STEP / END` logging constraints for perfect automated evaluator compatibility.
+- **🔄 Standardized Endpoints**: Provides OpenEnv compatible `/reset` and `/step` hooks for continuous training rollouts.
+- **🔍 Real-World Complexity**: Replaces simple "gamified" environments with an extremely complex DevOps pipeline. The agent must navigate hardcoded secrets, injection flaws, and architectural vulnerabilities.
+- **⚡ Rate-Limit Resilient**: Features sophisticated exponential backoffs and graceful demonstration fail-safes (Mock-data fallback) so the environment never crashes the RL training loop under high concurrency.
 
 ## 🛠️ Technology Stack
 
-- **Frontend**: Next.js 16, React 19, Tailwind CSS v4, Lucide Icons
-- **Backend**: Next.js API Routes (Serverless)
-- **AI Engine**: Google Generative AI (`@google/generative-ai`)
-- **Deployment**: Docker-ready, Hugging Face Spaces compatible
+- **Framework**: Next.js 16 App Router (Combined UI & Serverless APIs)
+- **RL Evaluator Shell**: Python 3.10 (`openenv.yaml`, `inference.py`, `python-dotenv`)
+- **AI Core**: Google Generative AI (`@google/generative-ai`), OpenAI Python Client (OpenEnv compliance)
+- **UX**: React 19, Tailwind CSS v4, Lucide Icons
+- **Deployment**: Hub Docker Registry, Hugging Face Spaces
 
 ## 🚀 Getting Started
 
-### Prerequisites
-- Node.js 20+
-- A Google Gemini API Key
-
-### Installation
+### Local Demonstration
 
 1. **Clone the repository**
    ```bash
@@ -45,30 +76,29 @@ Nexus Intelligence Platform is a next-generation security analysis tool designed
 
 2. **Install dependencies**
    ```bash
-   npm install
+   npm install      # Installs web UI and Scanner engines
+   pip install -r requirements.txt  # Installs inference dependencies
    ```
 
-3. **Configure Environment Variables**
-   Create a `.env.local` file in the root directory and add your Gemini API key:
+3. **Configure Environment**
+   Create a `.env.local` file and add your keys to access the models.
    ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
+   GEMINI_API_KEY=your_api_key_here
    ```
 
-4. **Run the Development Server**
+4. **Run the Application**
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000) to view the application.
+   *Dashboard available at http://localhost:3000.*
 
-## 🎯 How It Works
+### OpenEnv Evaluator Execution
 
-1. **Input**: Provide the URL of a public GitHub repository or a live cloud application endpoint.
-2. **Scan**: The application securely fetches the target's codebase or probes its live endpoints.
-3. **AI Analysis**: The data is sent to the Gemini AI model, which uses specialized prompts to act as a seasoned security auditor identifying potential zero-days, logic flaws, and standard OWASP vulnerabilities.
-4. **Report Generation**: A comprehensive, easy-to-read report is generated, complete with severity levels, precise locations of the vulnerabilities, and step-by-step remediation guidance.
+The provided `inference.py` script matches the exact OpenEnv hackathon checklist, handling the `START -> STEP -> END` trace.
+```bash
+python inference.py "Target codebase analysis prompt"
+```
 
 ## 🏆 Hackathon Judges' Note
 
-This project demonstrates the power of integrating cutting-edge LLMs directly into the DevSecOps pipeline. By automating complex security analysis that traditionally requires specialized human auditors, **Nexus Intelligence Platform** democratizes application security, making it accessible to developers of all skill levels.
-
-
+Nexus Intelligence Platform bridges the gap between synthetic toy environments and severe real-world applications. By transforming complex Static and Dynamic Application Security Testing (SAST/DAST) into an accessible RL environment, it enables the post-training of LLMs to independently secure enterprise infrastructure. 
