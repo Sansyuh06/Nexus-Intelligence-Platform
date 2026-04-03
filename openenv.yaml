@@ -1,0 +1,4 @@
+name: github-vuln-scanner
+version: "1.0.0"
+description: "Meta Hackathon - OpenEnv compliant Vulnerability Scanning Environment"
+spec_version: "1.0"
