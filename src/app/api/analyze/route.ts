@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Types
 type AnalyzeRequest = {
@@ -13,58 +12,46 @@ type FileNode = {
   url: string;
 };
 
-// Model fallback chain — if one model is rate-limited, try the next
-// Used latest, lite, and 1.0 versions to maximize the chance of finding an open quota bucket
-const MODEL_CHAIN = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest', 'gemini-1.0-pro'];
+const MODEL_NAME = 'Qwen/Qwen2.5-72B-Instruct';
 
-async function callGeminiWithRetry(prompt: string, apiKey: string): Promise<string> {
-  const genAI = new GoogleGenerativeAI(apiKey);
+async function callHuggingFaceWithRetry(prompt: string, apiKey: string): Promise<string> {
+  const url = "https://router.huggingface.co/v1/chat/completions";
+  
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      console.log(`[HF] Trying ${MODEL_NAME} (attempt ${attempt + 1})...`);
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: MODEL_NAME,
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 2000,
+          temperature: 0.2
+        })
+      });
 
-  for (const modelName of MODEL_CHAIN) {
-    // Increase retries to 4 per model
-    for (let attempt = 0; attempt < 4; attempt++) {
-      try {
-        console.log(`[Gemini] Trying ${modelName} (attempt ${attempt + 1})...`);
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const aiResponse = await model.generateContent(prompt);
-        const text = aiResponse.response.text();
-        console.log(`[Gemini] Success with ${modelName}`);
-        return text;
-      } catch (err: any) {
-        // Handle both 429 Too Many Requests and 503 Service Unavailable
-        const errorMessage = err?.message?.toLowerCase() || '';
-        const isRateLimited = errorMessage.includes('429') || err?.status === 429 || 
-                              errorMessage.includes('quota') || errorMessage.includes('503') || err?.status === 503;
-                              
-        const isNotFound = errorMessage.includes('404') || err?.status === 404 || errorMessage.includes('not found');
-
-        if (isNotFound) {
-          console.warn(`[Gemini] Model ${modelName} not found/supported by this API key, skipping...`);
-          break; // Try next model in the chain immediately
-        }
-                              
-        if (isRateLimited && attempt < 3) {
-          // Exponential backoff: 3s, 6s, 12s
+      if (!response.ok) {
+        if (response.status === 429 || response.status === 503) {
           const delay = Math.pow(2, attempt) * 3000;
-          console.warn(`[Gemini] Overloaded/Ratelimited on ${modelName}, retrying in ${delay}ms...`);
+          console.warn(`[HF] Rate limited/Overloaded, retrying in ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        
-        if (isRateLimited) {
-          console.warn(`[Gemini] ${modelName} exhausted all retries, falling back to next model...`);
-          break; // Try next model in the chain
-        }
-        
-        // If it's a completely different error (e.g. invalid key), throw immediately
-        console.error(`[Gemini] Non-rate-limit error on ${modelName}:`, err);
-        throw err;
+        throw new Error(`HuggingFace API error: ${response.status} ${response.statusText}`);
       }
+
+      const json = await response.json();
+      return json.choices[0].message.content;
+    } catch (err: any) {
+      if (attempt === 2) throw err;
     }
   }
   
-  // If we reach here, ALL models failed. Let's return a safe mock response instead of completely crashing the hackathon demo.
-  console.error('[Gemini] All models failed. Returning mock demo data.');
+  console.error('[HF] All attempts failed. Returning mock demo data.');
   return JSON.stringify([
     {
       severity: "HIGH",
@@ -79,8 +66,8 @@ async function callGeminiWithRetry(prompt: string, apiKey: string): Promise<stri
 
 export async function POST(req: Request) {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY server configuration is missing.' }, { status: 500 });
+    if (!process.env.HF_TOKEN) {
+      return NextResponse.json({ error: 'HF_TOKEN server configuration is missing.' }, { status: 500 });
     }
 
     const body: AnalyzeRequest = await req.json();
@@ -192,9 +179,9 @@ REPOSITORY CODE:
 ${codeContext}
 `;
 
-    // 5. Fire Request to Gemini with retry + fallback
-    console.log(`[API] Analyzing with Gemini (retry-enabled)...`);
-    let responseText = await callGeminiWithRetry(prompt, process.env.GEMINI_API_KEY);
+    // 5. Fire Request to HuggingFace with retry + fallback
+    console.log(`[API] Analyzing with HuggingFace (retry-enabled)...`);
+    let responseText = await callHuggingFaceWithRetry(prompt, process.env.HF_TOKEN);
     
     // Strip markdown fences if Gemini added them despite prompt
     responseText = responseText.replace(/^```(json)?/, '').replace(/```$/, '').trim();
