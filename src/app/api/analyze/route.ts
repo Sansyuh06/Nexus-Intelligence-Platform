@@ -14,20 +14,19 @@ type FileNode = {
 
 const MODEL_NAME = 'Qwen/Qwen2.5-72B-Instruct';
 
-async function callHuggingFaceWithRetry(prompt: string, apiKey: string): Promise<string> {
-  const url = "https://router.huggingface.co/v1/chat/completions";
+async function callHuggingFaceWithRetry(prompt: string): Promise<string> {
+  const url = "https://text.pollinations.ai/openai/v1/chat/completions";
   
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      console.log(`[HF] Trying ${MODEL_NAME} (attempt ${attempt + 1})...`);
+      console.log(`[AI Engine] Trying Free API (attempt ${attempt + 1})...`);
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: MODEL_NAME,
+          model: "openai", // Uses default free reasoning model
           messages: [{ role: "user", content: prompt }],
           max_tokens: 2000,
           temperature: 0.2
@@ -65,12 +64,7 @@ async function callHuggingFaceWithRetry(prompt: string, apiKey: string): Promise
 }
 
 export async function POST(req: Request) {
-  try {
-    if (!process.env.HF_TOKEN) {
-      return NextResponse.json({ error: 'HF_TOKEN server configuration is missing.' }, { status: 500 });
-    }
-
-    const body: AnalyzeRequest = await req.json();
+  try {    const body: AnalyzeRequest = await req.json();
     const { githubUrl } = body;
 
     if (!githubUrl || !githubUrl.includes('github.com')) {
@@ -179,9 +173,9 @@ REPOSITORY CODE:
 ${codeContext}
 `;
 
-    // 5. Fire Request to HuggingFace with retry + fallback
-    console.log(`[API] Analyzing with HuggingFace (retry-enabled)...`);
-    let responseText = await callHuggingFaceWithRetry(prompt, process.env.HF_TOKEN);
+    // 5. Fire Request to Free AI with retry + fallback
+    console.log(`[API] Analyzing with Free Serverless (retry-enabled)...`);
+    let responseText = await callHuggingFaceWithRetry(prompt);
     
     // Strip markdown fences if Gemini added them despite prompt
     responseText = responseText.replace(/^```(json)?/, '').replace(/```$/, '').trim();

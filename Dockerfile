@@ -20,6 +20,9 @@ RUN npm install
 # Copy complete application
 COPY . .
 
+# Make start script executable
+RUN chmod +x start.sh
+
 # Build the Next.js Production Bundle
 ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
@@ -29,5 +32,5 @@ ENV HOSTNAME "0.0.0.0"
 ENV PORT 7860
 EXPOSE 7860
 
-# Start server
-CMD ["npm", "start"]
+# Start both servers
+CMD ["./start.sh"]
