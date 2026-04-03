@@ -13,9 +13,39 @@ type FileNode = {
   url: string;
 };
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+// Model fallback chain — if one model is rate-limited, try the next
+const MODEL_CHAIN = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+
+async function callGeminiWithRetry(prompt: string, apiKey: string): Promise<string> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  for (const modelName of MODEL_CHAIN) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        console.log(`[Gemini] Trying ${modelName} (attempt ${attempt + 1})...`);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const aiResponse = await model.generateContent(prompt);
+        const text = aiResponse.response.text();
+        console.log(`[Gemini] Success with ${modelName}`);
+        return text;
+      } catch (err: any) {
+        const is429 = err?.message?.includes('429') || err?.status === 429;
+        if (is429 && attempt < 2) {
+          const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s
+          console.warn(`[Gemini] 429 on ${modelName}, retrying in ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        if (is429) {
+          console.warn(`[Gemini] ${modelName} exhausted, falling back...`);
+          break; // try next model in chain
+        }
+        throw err; // non-429 error, bubble up
+      }
+    }
+  }
+  throw new Error('All Gemini models are rate-limited. Please wait a minute and try again.');
+}
 
 export async function POST(req: Request) {
   try {
@@ -66,25 +96,23 @@ export async function POST(req: Request) {
     
     // Filter for actionable source code files
     const validExtensions = ['.js', '.jsx', '.ts', '.tsx', '.py', '.go', '.java', '.php', '.rb', '.c', '.cpp', '.cs'];
-    const maxFiles = 30; // Hard limit to avoid timeout/rate limits during demo
+    const maxFiles = 30;
     
     let sourceFiles: FileNode[] = treeData.tree
       .filter((file: FileNode) => file.type === 'blob')
       .filter((file: FileNode) => validExtensions.some(ext => file.path.endsWith(ext)))
       .filter((file: FileNode) => !file.path.includes('node_modules') && !file.path.includes('vendor') && !file.path.includes('dist'));
 
-    // If repo is huge, slice it to prevent overwhelming the request time
     sourceFiles = sourceFiles.slice(0, maxFiles);
 
     if (sourceFiles.length === 0) {
       return NextResponse.json({ error: 'No supported source code files found to analyze in this repository.' }, { status: 404 });
     }
 
-    // 3. Download Source Code Contents in Parallel (Batched to respect GH rate limits)
+    // 3. Download Source Code Contents in Parallel
     console.log(`[API] Downloading ${sourceFiles.length} source code files...`);
     const fileContents: { path: string; content: string }[] = [];
     
-    // Batch process to avoid HTTP 429
     for (let i = 0; i < sourceFiles.length; i += 5) {
         const batch = sourceFiles.slice(i, i + 5);
         const fetches = batch.map(async (f) => {
@@ -103,11 +131,10 @@ export async function POST(req: Request) {
         }
     }
 
-    // 4. Construct Prompt for Gemini 2.5 Flash
+    // 4. Construct Prompt
     console.log(`[API] Assembling code context for Gemini Analysis...`);
     let codeContext = fileContents.map(f => `--- FILE: ${f.path} ---\n${f.content}\n`).join('\n');
     
-    // Truncate massively if needed (Gemini Flash can handle 1M, but we prevent edge cases)
     if (codeContext.length > 500000) {
         codeContext = codeContext.substring(0, 500000) + "\n...[TRUNCATED DUE TO SIZE]...";
     }
@@ -135,10 +162,9 @@ REPOSITORY CODE:
 ${codeContext}
 `;
 
-    // 5. Fire Request to Gemini
-    console.log(`[API] Analyzing with Gemini...`);
-    const aiResponse = await model.generateContent(prompt);
-    let responseText = aiResponse.response.text();
+    // 5. Fire Request to Gemini with retry + fallback
+    console.log(`[API] Analyzing with Gemini (retry-enabled)...`);
+    let responseText = await callGeminiWithRetry(prompt, process.env.GEMINI_API_KEY);
     
     // Strip markdown fences if Gemini added them despite prompt
     responseText = responseText.replace(/^```(json)?/, '').replace(/```$/, '').trim();
@@ -160,3 +186,5 @@ ${codeContext}
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
+
+
