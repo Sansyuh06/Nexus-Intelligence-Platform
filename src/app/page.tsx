@@ -105,7 +105,7 @@ export default function Home() {
                 {activeTab === 'sast' ? <Github size={20} /> : <Globe size={20} />}
               </div>
               <input
-                type="url"
+                type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder={activeTab === 'sast' ? "https://github.com/owner/repository" : "https://example.com"}

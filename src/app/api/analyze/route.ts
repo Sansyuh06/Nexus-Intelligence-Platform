@@ -14,13 +14,15 @@ type FileNode = {
 };
 
 // Model fallback chain — if one model is rate-limited, try the next
-const MODEL_CHAIN = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+// Used latest and lite versions to prevent 404s on specific API versions
+const MODEL_CHAIN = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest'];
 
 async function callGeminiWithRetry(prompt: string, apiKey: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
 
   for (const modelName of MODEL_CHAIN) {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // Increase retries to 4 per model
+    for (let attempt = 0; attempt < 4; attempt++) {
       try {
         console.log(`[Gemini] Trying ${modelName} (attempt ${attempt + 1})...`);
         const model = genAI.getGenerativeModel({ model: modelName });
@@ -29,22 +31,50 @@ async function callGeminiWithRetry(prompt: string, apiKey: string): Promise<stri
         console.log(`[Gemini] Success with ${modelName}`);
         return text;
       } catch (err: any) {
-        const is429 = err?.message?.includes('429') || err?.status === 429;
-        if (is429 && attempt < 2) {
-          const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s
-          console.warn(`[Gemini] 429 on ${modelName}, retrying in ${delay}ms...`);
+        // Handle both 429 Too Many Requests and 503 Service Unavailable
+        const errorMessage = err?.message?.toLowerCase() || '';
+        const isRateLimited = errorMessage.includes('429') || err?.status === 429 || 
+                              errorMessage.includes('quota') || errorMessage.includes('503') || err?.status === 503;
+                              
+        const isNotFound = errorMessage.includes('404') || err?.status === 404 || errorMessage.includes('not found');
+
+        if (isNotFound) {
+          console.warn(`[Gemini] Model ${modelName} not found/supported by this API key, skipping...`);
+          break; // Try next model in the chain immediately
+        }
+                              
+        if (isRateLimited && attempt < 3) {
+          // Exponential backoff: 3s, 6s, 12s
+          const delay = Math.pow(2, attempt) * 3000;
+          console.warn(`[Gemini] Overloaded/Ratelimited on ${modelName}, retrying in ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        if (is429) {
-          console.warn(`[Gemini] ${modelName} exhausted, falling back...`);
-          break; // try next model in chain
+        
+        if (isRateLimited) {
+          console.warn(`[Gemini] ${modelName} exhausted all retries, falling back to next model...`);
+          break; // Try next model in the chain
         }
-        throw err; // non-429 error, bubble up
+        
+        // If it's a completely different error (e.g. invalid key), throw immediately
+        console.error(`[Gemini] Non-rate-limit error on ${modelName}:`, err);
+        throw err;
       }
     }
   }
-  throw new Error('All Gemini models are rate-limited. Please wait a minute and try again.');
+  
+  // If we reach here, ALL models failed. Let's return a safe mock response instead of completely crashing the hackathon demo.
+  console.error('[Gemini] All models failed. Returning mock demo data.');
+  return JSON.stringify([
+    {
+      severity: "HIGH",
+      title: "API Rate Limits Exhausted (Demo Note)",
+      description: "The AI analysis engines are currently experiencing heavy load. This is a placeholder vulnerability injected to prevent the dashboard from completely crashing during your demo.",
+      file: "system",
+      lineSnippet: "N/A",
+      suggestion: "Please try running the scan again in a minute, or use a smaller repository."
+    }
+  ]);
 }
 
 export async function POST(req: Request) {

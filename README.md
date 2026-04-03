@@ -71,5 +71,4 @@ Nexus Intelligence Platform is a next-generation security analysis tool designed
 
 This project demonstrates the power of integrating cutting-edge LLMs directly into the DevSecOps pipeline. By automating complex security analysis that traditionally requires specialized human auditors, **Nexus Intelligence Platform** democratizes application security, making it accessible to developers of all skill levels.
 
----
-*Built with ❤️ for a more secure web.*
+
