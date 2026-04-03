@@ -1,9 +1,9 @@
+node_modules
+.next
 .env
 .env.local
-node_modules/
-.next/
 *.log
+build.log
+ts_error.log
 scan_results.json
 security_assessment_report.pdf
-ts_error.log
-build.log
