@@ -3,7 +3,7 @@ FROM node:20-bookworm
 WORKDIR /app
 
 # Install Python and tools for the DAST Scanner
-RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
+RUN apt-get update && apt-get install -y python3 python3-pip python3-venv build-essential
 
 # Set up python virtual environment to avoid PEP 668 Debian warnings
 RUN python3 -m venv /opt/venv
@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Node dependencies
 COPY package.json ./
-RUN npm install
+RUN npm install --ignore-scripts
 
 # Copy complete application
 COPY . .
