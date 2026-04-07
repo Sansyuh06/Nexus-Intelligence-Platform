@@ -14,8 +14,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Node dependencies
-COPY package*.json ./
-RUN npm config set fetch-retry-maxtimeouts 1200000 && npm install --legacy-peer-deps
+COPY package.json ./
+RUN npm install
 
 # Copy complete application
 COPY . .
