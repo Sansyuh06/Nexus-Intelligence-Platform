@@ -33,7 +33,7 @@ action_space:
     - scan_code
     - submit
 observation_type: json
-reward_range: [0.0, 1.0]
+reward_range: [0.01, 0.99]
 api:
   reset: "POST /reset"
   step: "POST /step"

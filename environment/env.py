@@ -35,7 +35,7 @@ class CVETriageEnv:
         self.action_history: list[str] = []
         self.episode_done: bool = False
         self.last_reward: CVEReward = CVEReward(
-            value=0.0, breakdown={}, message="Episode not started"
+            value=0.01, breakdown={}, message="Episode not started"
         )
 
     # ------------------------------------------------------------------
@@ -47,7 +47,7 @@ class CVETriageEnv:
         self.action_history = []
         self.episode_done = False
         self.last_reward = CVEReward(
-            value=0.0, breakdown={}, message="Episode not started"
+            value=0.01, breakdown={}, message="Episode not started"
         )
 
     # ------------------------------------------------------------------
@@ -96,9 +96,9 @@ class CVETriageEnv:
             )
             self.episode_done = True
         else:
-            # Partial step signal: useful data → +0.05, error → -0.05
+            # Partial step signal: useful data → +0.05, error → 0.01
             has_error = "error" in output
-            partial = -0.05 if has_error else 0.05
+            partial = 0.01 if has_error else 0.05
             reward = CVEReward(
                 value=partial,
                 breakdown={"step_signal": partial},
@@ -113,8 +113,8 @@ class CVETriageEnv:
         if self.step_number >= self.task.max_steps and not self.episode_done:
             self.episode_done = True
             reward = CVEReward(
-                value=0.0,
-                breakdown={"timeout": 0.0},
+                value=0.01,
+                breakdown={"timeout": 0.01},
                 message=(
                     f"Max steps ({self.task.max_steps}) reached "
                     "without submitting an answer."
