@@ -37,7 +37,7 @@ class Grader:
             messages.append(f"Unknown difficulty: {task.difficulty}")
 
         raw = sum(breakdown.values())
-        clamped = min(1.0, max(0.0, raw))
+        clamped = min(0.99, max(0.01, raw))
         return CVEReward(
             value=clamped,
             breakdown=breakdown,

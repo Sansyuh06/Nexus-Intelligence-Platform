@@ -126,9 +126,11 @@ def run_task(task_id: str) -> None:
         success = False
     finally:
         rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+        avg_score = sum(rewards) / len(rewards) if rewards else 0.0
+        final_score = min(0.99, max(0.01, avg_score))
         print(
             f"[END] success={str(success).lower()} "
-            f"steps={steps} rewards={rewards_str}"
+            f"steps={steps} score={final_score:.2f} rewards={rewards_str}"
         )
 
 

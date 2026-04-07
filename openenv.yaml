@@ -3,7 +3,7 @@ version: "1.0.0"
 type: space
 runtime: python
 app: server.app:app
-port: 8000
+port: 7860
 description: >
   Real-world DevSecOps triage environment where AI agents
   investigate CVE IDs to extract GAV metadata and identify

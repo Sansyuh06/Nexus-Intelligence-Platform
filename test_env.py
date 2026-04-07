@@ -27,10 +27,10 @@ def main():
     # Test clamping
     reward2 = CVEReward(value=1.5, breakdown={}, message="clamp test")
     print(f"  CVEReward clamped 1.5 -> {reward2.value}")
-    assert reward2.value == 1.0
+    assert reward2.value == 0.99
     reward3 = CVEReward(value=-0.5, breakdown={}, message="clamp test")
     print(f"  CVEReward clamped -0.5 -> {reward3.value}")
-    assert reward3.value == 0.0
+    assert reward3.value == 0.01
     print("  model_dump works:", type(obs.model_dump()))
 
     # Test 3: Tasks
@@ -109,7 +109,7 @@ def main():
     print(f"  submit: reward={reward.value:.2f}, done={done}")
     print(f"  Breakdown: {reward.breakdown}")
     assert done
-    assert reward.value == 1.0, f"Expected 1.0, got {reward.value}"
+    assert reward.value == 0.99, f"Expected 0.99, got {reward.value}"
 
     # Test 7: Hard task dry-run
     print("\n=== Test 7: Hard Task Dry-Run ===")
@@ -132,7 +132,7 @@ def main():
     print(f"  submit: reward={reward.value:.2f}, done={done}")
     print(f"  Breakdown: {reward.breakdown}")
     assert done
-    assert reward.value == 1.0, f"Expected 1.0, got {reward.value}"
+    assert reward.value == 0.99, f"Expected 0.99, got {reward.value}"
 
     # Test 8: state()
     print("\n=== Test 8: state() ===")

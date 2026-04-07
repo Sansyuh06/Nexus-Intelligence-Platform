@@ -63,7 +63,7 @@ class CVEReward(BaseModel):
     @field_validator("value", mode="before")
     @classmethod
     def clamp_value(cls, v: float) -> float:
-        return min(1.0, max(0.0, float(v)))
+        return min(0.99, max(0.01, float(v)))
 
 
 class TaskConfig(BaseModel):
