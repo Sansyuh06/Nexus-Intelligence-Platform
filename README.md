@@ -39,7 +39,15 @@ Most security agents are trained in "honest" environments where tool outputs are
 | Reward Curve | Epistemic Calibration | Emergent Behavior |
 | :---: | :---: | :---: |
 | ![Reward Curve](assets/reward_curve.png) | ![Calibration Curve](assets/calibration_curve.png) | ![Behavior Curve](assets/behavior_curve.png) |
-| **Improvement in reasoning accuracy** | **Alignment of confidence with truth** | **Rise in multi-source verification** |
+
+![Per-Task Comparison](assets/per_task_comparison.png)
+
+| Metric | Baseline | Trained | Δ |
+|--------|----------|---------|---|
+| Avg Reward | 0.057 | 0.999 | +0.941 |
+| Calibration | 0.031 | 0.188 | +506% |
+| Cross-Verify Rate | 0% | 100% | +100pp |
+| Sources Consulted | 1.0 | 5.0 | +400% |
 
 ---
 
