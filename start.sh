@@ -2,11 +2,10 @@
 
 echo "Starting servers..."
 
-# Virtual environment is already in PATH from Dockerfile
-
-# Start FastAPI server in background
-echo "Starting FastAPI on port 7860..."
-python -m uvicorn server.app:app --host 0.0.0.0 --port 7860 &
+# Start FastAPI server in background (reads PORT from env, defaults to 8000)
+FASTAPI_PORT="${PORT:-8000}"
+echo "Starting FastAPI on port $FASTAPI_PORT..."
+python3 -m uvicorn server.app:app --host 0.0.0.0 --port "$FASTAPI_PORT" &
 FASTAPI_PID=$!
 echo "FastAPI started with PID $FASTAPI_PID"
 
@@ -22,10 +21,10 @@ else
     exit 1
 fi
 
-# Start Next.js server as detached background process
+# Start Next.js server in production mode (build artifact must exist)
 echo "Starting Next.js on port 3000..."
 export PORT=3000
-npm run dev || true &
+npm start &
 
 # Wait for FastAPI so container doesn't exit
 wait $FASTAPI_PID

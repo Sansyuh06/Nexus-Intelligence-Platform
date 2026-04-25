@@ -1,9 +1,44 @@
+# Environments
 .env
 .env.local
+
+# Dependencies
 node_modules/
+package-lock.json
+uv.lock
+
+# Next.js
 .next/
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.mypy_cache/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Logs
 *.log
 scan_results.json
+
+# Reports
 security_assessment_report.pdf
-ts_error.log
-build.log
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.bak
+
+# Scratch / temp files
+parsed*.txt
+extract_pdf_clean.py
+read_pdf*.py
+reaserouces/
+agents/
+tsconfig.tsbuildinfo

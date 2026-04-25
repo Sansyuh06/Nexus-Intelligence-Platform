@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     await fs.mkdir(publicDir, { recursive: true });
 
     // Execute Python Scanner headless
-    const pythonProcess = spawn('python', [pythonScriptPath, targetUrl], { cwd: process.cwd() });
+    const pythonProcess = spawn('python3', [pythonScriptPath, targetUrl], { cwd: process.cwd() });
 
     let logs = '';
     let errorLogs = '';

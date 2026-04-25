@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-export async function GET() {
+async function proxyState() {
   try {
     const response = await fetch('http://localhost:8000/state');
     if (!response.ok) {
@@ -12,4 +12,12 @@ export async function GET() {
     console.error('Error proxying /state to FastAPI:', error);
     return NextResponse.json({ error: 'FastAPI unavailable' }, { status: 502 });
   }
+}
+
+export async function GET() {
+  return proxyState();
+}
+
+export async function POST() {
+  return proxyState();
 }

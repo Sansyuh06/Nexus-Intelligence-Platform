@@ -12,7 +12,7 @@ type FileNode = {
   url: string;
 };
 
-const MODEL_NAME = 'Qwen/Qwen2.5-72B-Instruct';
+
 
 async function callHuggingFaceWithRetry(prompt: string): Promise<string> {
   const url = "https://text.pollinations.ai/openai/v1/chat/completions";
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
     }
 
     // 4. Construct Prompt
-    console.log(`[API] Assembling code context for Gemini Analysis...`);
+    console.log(`[API] Assembling code context for AI Analysis...`);
     let codeContext = fileContents.map(f => `--- FILE: ${f.path} ---\n${f.content}\n`).join('\n');
     
     if (codeContext.length > 500000) {
@@ -177,7 +177,7 @@ ${codeContext}
     console.log(`[API] Analyzing with Free Serverless (retry-enabled)...`);
     let responseText = await callHuggingFaceWithRetry(prompt);
     
-    // Strip markdown fences if Gemini added them despite prompt
+    // Strip markdown fences if the model wrapped its response
     responseText = responseText.replace(/^```(json)?/, '').replace(/```$/, '').trim();
 
     try {
@@ -188,7 +188,7 @@ ${codeContext}
           vulnerabilities: parsedResults
       });
     } catch (parseError) {
-      console.error("Failed to parse Gemini output", responseText);
+      console.error("Failed to parse AI output", responseText);
       return NextResponse.json({ error: 'AI analysis returned invalid format.', raw_output: responseText }, { status: 502 });
     }
 

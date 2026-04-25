@@ -77,7 +77,7 @@ export default function Home() {
             Nexus Intelligence Platform
           </h1>
           <p className="text-gray-400 max-w-xl mx-auto text-lg">
-            Full-spectrum security auditing. Analyze source code dynamically with Gemini AI, or probe live cloud applications for dynamic vulnerabilities.
+            Full-spectrum security auditing. Analyze source code dynamically with AI, or probe live cloud applications for dynamic vulnerabilities.
           </p>
         </header>
 

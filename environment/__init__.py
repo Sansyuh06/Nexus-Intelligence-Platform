@@ -7,6 +7,7 @@ then everything else.
 
 from environment.models import CVEAction, CVEObservation, CVEReward, TaskConfig
 from environment.env import CVETriageEnv
+from environment.corruption import CorruptionEngine
 
 __all__ = [
     "CVEAction",
@@ -14,4 +15,5 @@ __all__ = [
     "CVEReward",
     "TaskConfig",
     "CVETriageEnv",
+    "CorruptionEngine",
 ]

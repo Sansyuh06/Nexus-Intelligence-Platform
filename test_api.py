@@ -1,9 +1,8 @@
 """Test all FastAPI API endpoints."""
 
 import httpx
-import json
 
-BASE = "http://localhost:7860"
+BASE = "http://localhost:8000"
 
 
 def main():
@@ -20,7 +19,7 @@ def main():
         name = t["name"]
         print(f"  {tid}: {name}")
     assert r.status_code == 200
-    assert len(r.json()) == 3
+    assert len(r.json()) == 4
 
     # Test /reset
     r = httpx.post(f"{BASE}/reset", json={"task_id": "easy"})
@@ -31,7 +30,10 @@ def main():
     assert obs["cve_id"] == "CVE-2022-42889"
 
     # Test /step - search_nvd
-    r = httpx.post(f"{BASE}/step", json={"action_type": "search_nvd", "parameters": {}})
+    r = httpx.post(
+        f"{BASE}/step",
+        json={"action_type": "search_nvd", "parameters": {}}
+    )
     print(f"\nStep (search_nvd): {r.status_code}")
     data = r.json()
     print(f"  reward={data['reward']['value']}, done={data['done']}")
@@ -61,7 +63,10 @@ def main():
     assert r.status_code == 200
 
     # Test step after done (should 400)
-    r = httpx.post(f"{BASE}/step", json={"action_type": "search_nvd", "parameters": {}})
+    r = httpx.post(
+        f"{BASE}/step",
+        json={"action_type": "search_nvd", "parameters": {}}
+    )
     print(f"\nStep after done: {r.status_code} (expected 400)")
     assert r.status_code == 400
 

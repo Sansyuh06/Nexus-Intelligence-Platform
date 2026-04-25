@@ -20,6 +20,7 @@ class CVEObservation(BaseModel):
 
     cve_id: str
     step_number: int = 0
+    difficulty: str = "easy"
     action_history: list[str] = Field(default_factory=list)
     current_output: dict[str, Any] = Field(default_factory=dict)
     available_actions: list[str] = Field(
@@ -29,10 +30,14 @@ class CVEObservation(BaseModel):
             "lookup_gav",
             "search_method",
             "scan_code",
+            "simulate_exploit",
+            "suggest_patch",
             "submit",
         ]
     )
     episode_done: bool = False
+    # Source tracking for cross-verification
+    sources_consulted: list[str] = Field(default_factory=list)
 
 
 class CVEAction(BaseModel):
@@ -46,6 +51,8 @@ class CVEAction(BaseModel):
         "lookup_gav",
         "search_method",
         "scan_code",
+        "simulate_exploit",
+        "suggest_patch",
         "submit",
     ]
     parameters: dict[str, Any] = Field(default_factory=dict)
@@ -56,14 +63,14 @@ class CVEReward(BaseModel):
 
     model_config = ConfigDict(strict=False)
 
-    value: float = Field(gt=0.0, lt=1.0, default=0.01)
+    value: float = Field(ge=0.0, le=1.0, default=0.01)
     breakdown: dict[str, float] = Field(default_factory=dict)
     message: str = ""
 
     @field_validator("value", mode="before")
     @classmethod
     def clamp_value(cls, v: float) -> float:
-        return min(0.99, max(0.01, float(v)))
+        return min(1.0, max(0.0, float(v)))
 
 
 class TaskConfig(BaseModel):
@@ -74,7 +81,7 @@ class TaskConfig(BaseModel):
     task_id: str
     name: str
     description: str
-    difficulty: Literal["easy", "medium", "hard"]
+    difficulty: Literal["easy", "medium", "hard", "expert"]
     cve_id: str
     ground_truth: dict[str, Any]
     max_steps: int = 10

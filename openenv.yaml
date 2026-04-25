@@ -1,19 +1,21 @@
 name: cve-triage-env
-version: "1.0.0"
+version: "2.0.0"
 type: space
 runtime: python
 app: server.app:app
-port: 7860
+port: 8000
 description: >
-  Real-world DevSecOps triage environment where AI agents
-  investigate CVE IDs to extract GAV metadata and identify
-  vulnerable methods across 3 difficulty levels.
+  Adversarial Security Reasoning Environment where AI agents
+  investigate CVE vulnerabilities under unreliable information
+  conditions. Trains agents for epistemic calibration,
+  cross-verification, and confidence-gated submission across
+  4 difficulty levels.
 tasks:
   - id: easy
     name: GAV Extraction
     difficulty: easy
     cve_id: CVE-2022-42889
-    max_steps: 5
+    max_steps: 7
   - id: medium
     name: Method Discovery
     difficulty: medium
@@ -24,6 +26,11 @@ tasks:
     difficulty: hard
     cve_id: CVE-2022-22965
     max_steps: 12
+  - id: expert
+    name: Full Investigation + Remediation
+    difficulty: expert
+    cve_id: CVE-2021-42550
+    max_steps: 15
 action_space:
   types:
     - search_nvd
@@ -31,10 +38,19 @@ action_space:
     - lookup_gav
     - search_method
     - scan_code
+    - simulate_exploit
+    - suggest_patch
     - submit
 observation_type: json
-reward_range: [0.01, 0.99]
+reward_range: [0.0, 1.0]
 api:
   reset: "POST /reset"
   step: "POST /step"
   state: "GET /state"
+  close: "POST /close"
+innovation:
+  unreliable_world_engine: true
+  corruption_rate: 0.25
+  calibration_reward: brier_score
+  cross_verification: true
+  partial_observability: true

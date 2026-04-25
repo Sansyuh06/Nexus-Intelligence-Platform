@@ -6,6 +6,7 @@ Exposes the OpenEnv-compliant REST API for the CVE triage environment.
 
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Any
@@ -13,9 +14,9 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from environment.models import CVEAction, CVEObservation, CVEReward, TaskConfig
+from environment.models import CVEAction
 from environment.env import CVETriageEnv
 from environment.tasks import TASKS
 
@@ -46,11 +47,21 @@ class HealthResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[arg-type]
     """Initialise the environment on startup."""
     initial_task = os.getenv("TASK_ID", "easy")
-    app.state.env = CVETriageEnv(initial_task)
+    # Bug 11 fix: gracefully handle invalid TASK_ID
+    try:
+        app.state.env = CVETriageEnv(initial_task)
+    except ValueError:
+        logger.warning(
+            "Invalid TASK_ID '%s', falling back to 'easy'.", initial_task
+        )
+        app.state.env = CVETriageEnv("easy")
     yield
 
 
@@ -64,7 +75,7 @@ app = FastAPI(
         "A real-world OpenEnv environment where AI agents investigate "
         "CVE IDs to extract GAV metadata and identify vulnerable methods."
     ),
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -123,6 +134,14 @@ async def get_state() -> dict[str, Any]:
     return env.state()
 
 
+@app.post("/close")
+async def close_env() -> dict[str, Any]:
+    """Close the current episode and reset the environment."""
+    env: CVETriageEnv = app.state.env
+    env.reset()
+    return {"status": "closed", "message": "Environment reset and closed."}
+
+
 @app.get("/tasks")
 async def list_tasks() -> list[dict[str, Any]]:
     """Return all available task definitions."""
@@ -132,7 +151,7 @@ async def list_tasks() -> list[dict[str, Any]]:
 @app.get("/health")
 async def health_check() -> HealthResponse:
     """Health check endpoint."""
-    return HealthResponse(status="ok", version="1.0.0")
+    return HealthResponse(status="ok", version="2.0.0")
 
 
 # ---------------------------------------------------------------------------
@@ -143,9 +162,10 @@ def main() -> None:
     uvicorn.run(
         "server.app:app",
         host="0.0.0.0",
-        port=7860,
+        port=int(os.getenv("PORT", "8000")),
         reload=False,
     )
+
 
 if __name__ == "__main__":
     main()

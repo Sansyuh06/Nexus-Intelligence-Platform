@@ -1,8 +1,11 @@
 """
 CVE-Triage-Env: Baseline inference script.
 
-Runs all three tasks sequentially using an LLM via the OpenAI-compatible
+Runs all four tasks sequentially using an LLM via the OpenAI-compatible
 Hugging Face Inference API.  Emits mandatory stdout format for evaluation.
+
+Upgraded for v2: confidence scoring, cross-verification awareness,
+unreliable source detection.
 """
 
 from __future__ import annotations
@@ -33,12 +36,23 @@ MODEL = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
 
 SYSTEM_PROMPT = (
-    "You are a security triage agent investigating CVEs. "
+    "You are a security triage agent investigating CVEs in an UNRELIABLE "
+    "information environment. Tool outputs may contain corrupted data "
+    "(~25% of the time). You must cross-verify findings across multiple "
+    "sources before submitting.\n\n"
     "At each step you receive an observation JSON. "
     "Respond ONLY with a valid JSON object with exactly two keys: "
     "action_type (string) and parameters (dict). "
-    "No explanation. No markdown. No code fences. Raw JSON only. "
-    'Example: {"action_type": "search_nvd", "parameters": {}}'
+    "No explanation. No markdown. No code fences. Raw JSON only.\n\n"
+    "When submitting, include a 'confidence' field (float 0.0-1.0) "
+    "representing how confident you are in your answer. Be calibrated: "
+    "don't say 0.9 if you haven't verified across sources.\n\n"
+    "Available actions: search_nvd, fetch_advisory, lookup_gav, "
+    "search_method, scan_code, simulate_exploit, suggest_patch, submit\n\n"
+    'Example: {"action_type": "search_nvd", "parameters": {}}\n'
+    'Submit example: {"action_type": "submit", "parameters": '
+    '{"group": "org.example", "artifact": "lib", "safe_version": "1.0", '
+    '"confidence": 0.85}}'
 )
 
 
@@ -54,40 +68,52 @@ def run_task(task_id: str) -> None:
 
     rewards: list[float] = []
     steps: int = 0
-    error_msg: str = "null"
+    error_msg: str | None = None
     success: bool = False
+    terminal_reward: float = 0.0  # Bug 9 fix: track terminal reward separately
+
+    # Bug 8 fix: maintain full conversation history across steps
+    conversation_history: list[dict[str, str]] = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+    ]
 
     print(f"[START] task={task_id} env=cve-triage-env model={MODEL}")
 
     try:
         while not obs.episode_done:
-            # Build conversation for the LLM
+            # Build user message for this step
             observation_dump = obs.model_dump()
-            # Remove non-serialisable / overly large fields for prompt
             user_content = (
                 f"Current observation: {json.dumps(observation_dump)}\n"
                 f"Available actions: {obs.available_actions}\n"
+                f"Sources consulted so far: {obs.sources_consulted}\n"
+                f"Difficulty: {obs.difficulty}\n"
                 "What is your next action?"
             )
 
-            messages: list[dict[str, str]] = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
-            ]
+            # Bug 8 fix: append user message to conversation history
+            conversation_history.append(
+                {"role": "user", "content": user_content}
+            )
 
             response = client.chat.completions.create(
                 model=MODEL,
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=200,
+                messages=conversation_history,  # type: ignore[arg-type]
+                max_tokens=300,
                 temperature=0.2,
             )
 
             raw: str = response.choices[0].message.content or ""
             raw = raw.strip()
 
-            # ------------------------------------------------------------------
+            # Bug 8 fix: append assistant response to conversation history
+            conversation_history.append(
+                {"role": "assistant", "content": raw}
+            )
+
+            # ----------------------------------------------------------
             # Parse model response — graceful fallback on malformed JSON
-            # ------------------------------------------------------------------
+            # ----------------------------------------------------------
             try:
                 # Strip markdown fences if the model wraps its response
                 if raw.startswith("```"):
@@ -99,15 +125,18 @@ def run_task(task_id: str) -> None:
                     parameters=action_data.get("parameters", {}),
                 )
             except (json.JSONDecodeError, ValueError) as parse_err:
-                # Force a submit with empty params to end episode cleanly
-                action = CVEAction(action_type="submit", parameters={})
+                # Force a submit with low confidence to end episode cleanly
+                action = CVEAction(
+                    action_type="submit",
+                    parameters={"confidence": 0.1},
+                )
                 error_msg = f"Parse error: {str(parse_err)[:100]}"
 
             obs, reward, done, info = env.step(action)
             steps += 1
             rewards.append(reward.value)
 
-            step_error = error_msg if error_msg != "null" else "null"
+            step_error = error_msg if error_msg is not None else "null"
             print(
                 f"[STEP] step={steps} action={action.action_type} "
                 f"reward={reward.value:.2f} done={str(done).lower()} "
@@ -115,9 +144,11 @@ def run_task(task_id: str) -> None:
             )
 
             # Reset transient error after logging
-            error_msg = "null"
+            error_msg = None
 
             if done:
+                # Bug 9 fix: capture terminal reward separately
+                terminal_reward = reward.value
                 success = reward.value >= 0.5
                 break
 
@@ -126,8 +157,8 @@ def run_task(task_id: str) -> None:
         success = False
     finally:
         rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-        avg_score = sum(rewards) / len(rewards) if rewards else 0.0
-        final_score = min(0.99, max(0.01, avg_score))
+        # Bug 9 fix: use terminal_reward as final_score, not the average
+        final_score = min(0.99, max(0.01, terminal_reward))
         print(
             f"[END] success={str(success).lower()} "
             f"steps={steps} score={final_score:.2f} rewards={rewards_str}"
@@ -139,7 +170,7 @@ def run_task(task_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    """Run all three tasks sequentially."""
+    """Run all four tasks sequentially."""
     task_ids = [t.task_id for t in TASKS]
     for task_id in task_ids:
         run_task(task_id)

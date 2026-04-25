@@ -1,168 +1,82 @@
 ---
-title: Nexus Security Dashboard & OpenEnv CVE Triage
+title: CVE-Triage-Env
 emoji: 🛡️
-colorFrom: purple
+colorFrom: blue
 colorTo: indigo
 sdk: docker
-pinned: true
+pinned: false
+app_port: 8000
 ---
 
-# 🛡️ Nexus Intelligence: The Autonomous Security Engineer
+# CVE-Triage-Env 🛡️
+### Adversarial Reinforcement Learning for Real-World Vulnerability Triage
 
-> **A 10/10 Enterprise-Grade Reinforcement Learning (RL) Pipeline built natively atop a React Dashboard for the Meta & PyTorch OpenEnv Hackathon.**
+[![OpenEnv](https://img.shields.io/badge/OpenEnv-Compatible-green)](https://github.com/meta-pytorch/OpenEnv)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-When a critical zero-day exploit (such as Log4Shell) drops, human security teams spend hours sifting through chaotic network logs and codebases to trace the exposure. **What if Large Language Models could triage vulnerabilities autonomously?** 
-
-Currently, AI reasoning models are trained on simple toy puzzles (like Wordle or Tic-Tac-Toe). We built **Nexus Intelligence** to change that. 
-
-Nexus is a dual-purpose architecture:
-1. It serves as an **OpenEnv compatible Reinforcement Learning Sandbox**, where agents can be trained to interrogate severe CVE exposure across an enterprise network.
-2. It doubles as a **Beautiful Next.js Dashboard** that visually maps how the AI reasoning engine investigates repositories in real-time. 
-
-By replacing expensive models with **Hugging Face's Open-Weights (Qwen 2.5 72B)**, we have completely democratized complex cybersecurity agent training.
+**CVE-Triage-Env** is an advanced Reinforcement Learning environment built on the **OpenEnv** standard. It trains AI agents to investigate real-world CVEs (Log4Shell, Text4Shell, etc.) in an **unreliable information world** where data sources may be deliberately corrupt or conflicting.
 
 ---
 
-## 🌟 The Innovation: Why Nexus Stands Out
-
-This isn't a script wrapped in FastAPI. This is a meticulously engineered DevOps training pipeline built for real-world complexity.
-
-### 1. Advanced Partial-Credit Deterministic Evaluator
-Most OpenEnv submissions use gamified strict `1.0` or `0.0` reward outputs. Security is nuanced. Our deterministic environment grader actively analyzes the JSON payload produced by the agent. If the LLM successfully tracks down the package *Group* (e.g., `org.apache.logging`) but fails to extract the exact vulnerable *Version*, the Grader gracefully shapes the reward vector, delivering a partial score (e.g., `+0.6`). This fractional reward structure drastically accelerates Reinforcement Learning curve convergence limit.
-
-### 2. Eliminating Paid Walls (100% Free Inference)
-Security research should be open. To avoid locking developers behind expensive Google Gemini or anthropic paywalls, **Nexus is entirely decoupled from external paid ecosystems**. We built the inference backend relying solely on the **Hugging Face Serverless REST Router**. Using the open-weights `Qwen/Qwen2.5-72B-Instruct` model, anyone can pull this repository and begin training their RL pipeline using completely free Hugging Face API tokens.
-
-### 3. OpenEnv Architectural Compliance
-Our backend doesn't just run—it perfectly aligns with the strict PyTorch OpenEnv constraints.
-*   **The Log Trace Protocol**: Our `/step` execution loops natively output perfectly formatted `[START]`, `[STEP]`, and `[END]` text strings natively. This guarantees our inference logs can be digested instantly by 3rd-party automated evaluators during Hackathon grading.
-*   **AST Safety**: The FastAPI server cleanly wraps around Uvicorn in a dedicated `server.app` scope, allowing OpenEnv's static analyzer to import and read the configuration file natively without crashing due to frontend port collisions.
+## 🏆 Submission Materials
+- **Hugging Face Space:** [CVE-Triage-Env](https://huggingface.co/spaces/Sansyuh/CVE-Triage-Env)
+- **Training Notebook:** [train_rl.ipynb](./train_rl.ipynb)
+- **Technical Blog:** [blog.md](./blog.md)
+- **GitHub:** [Nexus-Intelligence-Platform](https://github.com/Sansyuh06/Nexus-Intelligence-Platform)
 
 ---
 
-## 🏗️ The Dual-Mode Architecture
-
-The magic of Nexus lies in its "Dual-Mode" deployment. The `backend` environment and the `frontend` web application coexist monolithically. We utilize Hugging Face serverless execution to power both simultaneously.
-
-```mermaid
-flowchart TB
-    %% Premium Styling Definitions
-    classDef ai fill:#0f172a,stroke:#60a5fa,stroke-width:2px,color:#f8fafc,rx:5,ry:5
-    classDef logic fill:#1e1b4b,stroke:#c084fc,stroke-width:2px,color:#f8fafc,rx:5,ry:5
-    classDef ui fill:#022c22,stroke:#34d399,stroke-width:2px,color:#f8fafc,rx:5,ry:5
-    classDef data fill:#450a0a,stroke:#ef4444,stroke-width:2px,color:#f8fafc,rx:5,ry:5
-
-    subgraph Core [Nexus Security Dual-Mode Architecture]
-        direction TB
-        
-        %% User Dashboard
-        subgraph Mode_1 [Mode 1: 💻 Interactive Security Sandbox]
-            direction LR
-            User([👤 Human Engineer]) ==>|Submits GitHub URL| Dash[Next.js Web UI]
-            Dash ==>|Invokes Free LLM| HF_API
-        end
-
-        %% RL Training Backbone
-        subgraph Mode_2 [Mode 2: 🔄 Autonomous DevSecOps Environment]
-            direction LR
-            Inf[python inference.py] -.->|API call: /reset| Setup[Load CVE Sandbox]
-            Setup -.->|State Vector Observation| Inf
-            
-            Inf ==>|Investigate Log Files| Step[FastAPI /step Endpoint]
-            Step ==>|Evaluation| RuleEngine{Deterministic Grader}
-            RuleEngine -.->|Observation + Reward Signal| Inf
-        end
-
-        %% Central Inference
-        subgraph Cloud [🤗 Hugging Face Serverless Core]
-            direction LR
-            HF_API((Hugging Face Hub Router)) ==>|Payload Delivery| LLM[Qwen-2.5-72B-Instruct]
-            
-            LLM -.->|Visual SAST Payload| Dash
-            LLM -.->|"Logs [START] [STEP] [END]"| Inf
-        end
-    end
-
-    %% Apply Styles
-    class Mode_1,User,Dash ui
-    class Mode_2,Inf,Setup,Step,RuleEngine logic
-    class Cloud,HF_API,LLM ai
-```
+## 🧠 The Innovation: The "Unreliable World" Engine
+Most security agents are trained in "honest" environments where tool outputs are always correct. **CVE-Triage-Env** introduces a research-grade **Corruption Engine**:
+- **Semantic Noise:** ~25% of tool outputs are realistically corrupted (e.g., patch-level version shifts, similar package confusion).
+- **Epistemic Calibration:** Agents are rewarded using a **Brier Score** (`reward -= (confidence - correctness)^2`), forcing them to "know what they don't know."
+- **Emergent Triangulation:** Training encourages agents to cross-verify facts across multiple independent sources before submitting.
 
 ---
 
-## 🛠️ The Technology Stack
+## 📈 Evidence of Improvement
 
-- **RL Evaluator Backend**: Python 3.11, FastAPI, Uvicorn, Pydantic V2 (`openenv.yaml` compliant).
-- **Frontend Dashboard**: Next.js 16 (App Router), React 19, Tailwind CSS v4.
-- **AI Ecosystem**: Hugging Face Open Serverless APIs (Standard JSON/REST schema). 
-- **Tests**: Comprehensive Pytest suite (`test_env.py` and `test_api.py`).
-
----
-
-## 🚀 Setting Up the Combined Project 
-
-This workspace is fully optimized so that an evaluator can run the full monolithic stack natively on a local machine.
-
-### 1. Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/your-username/github-vuln-scanner.git
-cd github-vuln-scanner
-
-# Install Next.js UI Dependencies
-npm install
-
-# Install OpenEnv Python Dependencies
-uv lock
-pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-
-Create a `.env.local` file at the root. We strictly route to Hugging Face free tier inference. There are zero paid dependencies.
-
-```env
-HF_TOKEN=your_huggingface_free_access_token
-```
-
-### 3. Start The Servers (Simultaneous Boot)
-
-Start the **RL OpenEnv Backend** (Runs natively on port `7860` for Hugging Face integration):
-```bash
-python -m server.app
-```
-
-In a new terminal window, start the **Next.js Visual Dashboard UI** (Runs on port `3000`):
-```bash
-npm run dev
-```
+| Reward Curve | Epistemic Calibration | Emergent Behavior |
+| :---: | :---: | :---: |
+| ![Reward Curve](assets/reward_curve.png) | ![Calibration Curve](assets/calibration_curve.png) | ![Behavior Curve](assets/behavior_curve.png) |
+| **Improvement in reasoning accuracy** | **Alignment of confidence with truth** | **Rise in multi-source verification** |
 
 ---
 
-## 🏆 Proof of Execution (For Hackathon Judges)
+## 🛠️ Environment Specs
+- **Actions:** `search_nvd`, `fetch_advisory`, `lookup_gav`, `search_method`, `scan_code`, `simulate_exploit` (Oracle), `submit`.
+- **Observation Space:** Partial observability (ID-only in Hard mode) with multi-turn history.
+- **Reward Model:** 
+  - `0.40` GAV/Version Correctness
+  - `0.20` Brier Score Calibration
+  - `0.20` Cross-Verification Bonus
+  - `-0.15` Hallucination Penalty
 
-We built this environment heavily prioritizing automated compliance criteria so that it seamlessly meshes with the Meta grading servers.
+---
 
-1. **Verify OpenEnv Structural Integration:**
-   Our YAML definitions and Python execution wrappers securely isolate the RL environment.
+## 🚀 Quick Start (Local)
+
+1. **Install Dependencies:**
    ```bash
-   openenv validate
+   pip install -r requirements.txt
+   npm install
    ```
-   *Expected Output: `[OK] github-vuln-scanner: Ready for multi-mode deployment`*
 
-2. **Verify Python Unit Tests & Grader Mathematics:**
-   Our standalone test scripts guarantee the Pydantic classes execute properly and the partial reward models do not fail under pressure.
+2. **Run Environment:**
    ```bash
-   python test_env.py
-   python test_api.py
+   python run.py
    ```
-   *Expected Output: `=== ALL TESTS PASSED ===`*
 
-3. **Verify Baseline Inference Formatting:**
-   When running the inference engine, strict parsing limits guarantee the `[STEP]` logs remain intact.
+3. **Run Baseline Inference:**
    ```bash
+   export HF_TOKEN="your_token"
    python inference.py
    ```
-   *Expected Output: Clean, bracketed stdout logs parsing the Qwen model responses.*
+
+---
+
+## 📜 Judging Criteria Compliance
+- **Innovation (40%):** Adversarial information world + Brier-score calibration.
+- **Storytelling (30%):** Integrated "Red Team" exploit oracle as verification.
+- **Improvement (20%):** Verified via training plots in `assets/`.
+- **Pipeline (10%):** Clean FastAPI/Next.js stack with OpenEnv-compliant YAML.
