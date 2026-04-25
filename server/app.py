@@ -93,6 +93,33 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 
+@app.get("/")
+async def root() -> dict[str, Any]:
+    """Landing page — shown when judges visit the Space URL."""
+    return {
+        "name": "CVE-Triage-Env",
+        "version": "2.0.0",
+        "description": (
+            "Adversarial RL environment for training AI agents to "
+            "investigate CVEs under unreliable information conditions."
+        ),
+        "endpoints": {
+            "health": "GET /health",
+            "reset": "POST /reset",
+            "step": "POST /step",
+            "state": "GET /state",
+            "close": "POST /close",
+            "tasks": "GET /tasks",
+            "docs": "GET /docs",
+        },
+        "innovation": "Unreliable World Engine — 25% of tool outputs are semantically corrupted",
+        "links": {
+            "github": "https://github.com/Sansyuh06/Nexus-Intelligence-Platform",
+            "blog": "https://huggingface.co/spaces/Sansyuh/CVE-Triage-Env/blob/main/blog.md",
+        },
+    }
+
+
 @app.post("/reset")
 async def reset_env(body: ResetRequest | None = None) -> dict[str, Any]:
     """Reset the environment, optionally switching tasks."""
