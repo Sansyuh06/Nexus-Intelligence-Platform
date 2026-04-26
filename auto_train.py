@@ -158,7 +158,7 @@ def train(records: list[dict]) -> None:
         return tokenizer(
             batch["text"],
             truncation=True,
-            max_length=512,
+            max_length=256,  # shorter = less VRAM
             padding=False,
         )
 
@@ -167,16 +167,21 @@ def train(records: list[dict]) -> None:
 
     collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
+    # Enable gradient checkpointing BEFORE wrapping in Trainer
+    model.gradient_checkpointing_enable()
+
     args = TrainingArguments(
         output_dir=MODEL_DIR,
         num_train_epochs=2,
-        per_device_train_batch_size=4,
-        gradient_accumulation_steps=2,
+        per_device_train_batch_size=1,   # 1 = minimal VRAM
+        gradient_accumulation_steps=8,   # effective batch = 8
         learning_rate=2e-5,
-        fp16=False,
-        logging_steps=5,
-        save_strategy="no",          # don't save checkpoints, only final
+        fp16=False,                       # float32 avoids unscale errors
+        logging_steps=10,
+        save_strategy="no",
         report_to="none",
+        gradient_checkpointing=True,      # halves VRAM at cost of speed
+        optim="adamw_torch",
     )
 
     trainer = Trainer(
