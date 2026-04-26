@@ -31,7 +31,7 @@ if not HF_TOKEN:
     sys.exit(1)
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 
 client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
 
@@ -77,7 +77,7 @@ def run_task(task_id: str) -> None:
         {"role": "system", "content": SYSTEM_PROMPT},
     ]
 
-    print(f"[START] task={task_id} env=cve-triage-env model={MODEL}")
+    print(f"[START] task={task_id} env=cve-triage-env model={MODEL_NAME}")
 
     try:
         while not obs.episode_done:
@@ -97,7 +97,7 @@ def run_task(task_id: str) -> None:
             )
 
             response = client.chat.completions.create(
-                model=MODEL,
+                model=MODEL_NAME,
                 messages=conversation_history,  # type: ignore[arg-type]
                 max_tokens=300,
                 temperature=0.2,
