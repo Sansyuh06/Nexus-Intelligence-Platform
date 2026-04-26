@@ -2,8 +2,8 @@
 CVE-Triage-Env: FastAPI application.
 
 Exposes the OpenEnv-compliant REST API for the CVE triage environment.
-The root "/" serves the Next.js frontend via reverse proxy.
-API endpoints (/reset, /step, /state, etc.) are served natively by FastAPI.
+Runs on an internal port (7860). Next.js on the public port proxies
+API requests here via rewrites().
 """
 
 from __future__ import annotations
@@ -13,11 +13,9 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from environment.models import CVEAction
@@ -53,14 +51,11 @@ class HealthResponse(BaseModel):
 
 logger = logging.getLogger(__name__)
 
-NEXTJS_URL = "http://127.0.0.1:3000"
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[arg-type]
     """Initialise the environment on startup."""
     initial_task = os.getenv("TASK_ID", "easy")
-    # Bug 11 fix: gracefully handle invalid TASK_ID
     try:
         app.state.env = CVETriageEnv(initial_task)
     except ValueError:
@@ -68,14 +63,7 @@ async def lifespan(app: FastAPI):  # type: ignore[arg-type]
             "Invalid TASK_ID '%s', falling back to 'easy'.", initial_task
         )
         app.state.env = CVETriageEnv("easy")
-    
-    # Create a shared httpx client for proxying
-    app.state.proxy_client = httpx.AsyncClient(
-        base_url=NEXTJS_URL, timeout=60.0
-    )
     yield
-    # Cleanup
-    await app.state.proxy_client.aclose()
 
 
 # ---------------------------------------------------------------------------
@@ -102,13 +90,13 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# API Routes (OpenEnv-compliant endpoints)
+# Routes
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/info")
-async def api_info() -> dict[str, Any]:
-    """API metadata endpoint — provides environment info as JSON."""
+@app.get("/")
+async def root() -> dict[str, Any]:
+    """Root endpoint — returns environment metadata as JSON."""
     return {
         "name": "CVE-Triage-Env",
         "version": "2.0.0",
@@ -131,6 +119,12 @@ async def api_info() -> dict[str, Any]:
             "blog": "https://huggingface.co/spaces/Sansyuh/CVE-Triage-Env/blob/main/blog.md",
         },
     }
+
+
+@app.get("/api/info")
+async def api_info() -> dict[str, Any]:
+    """API metadata endpoint."""
+    return await root()
 
 
 @app.post("/reset")
@@ -195,77 +189,6 @@ async def health_check() -> HealthResponse:
 
 
 # ---------------------------------------------------------------------------
-# Reverse Proxy: Forward everything else to Next.js frontend
-# ---------------------------------------------------------------------------
-
-
-async def _proxy_request(request: Request, path: str = "") -> StreamingResponse | JSONResponse:
-    """Proxy a request to the Next.js frontend server."""
-    try:
-        client: httpx.AsyncClient = request.app.state.proxy_client
-        
-        # Build target URL
-        url = f"/{path}" if path else "/"
-        
-        # Copy headers, remove host
-        headers = dict(request.headers)
-        headers.pop("host", None)
-        
-        # Read body
-        body = await request.body()
-        
-        # Forward the request
-        proxy_req = client.build_request(
-            request.method,
-            url,
-            headers=headers,
-            content=body,
-        )
-        response = await client.send(proxy_req, stream=True)
-        
-        async def stream_response():
-            async for chunk in response.aiter_raw():
-                yield chunk
-            await response.aclose()
-
-        # Build response headers (clean transfer encoding artifacts)
-        resp_headers = dict(response.headers)
-        resp_headers.pop("content-encoding", None)
-        resp_headers.pop("content-length", None)
-        resp_headers.pop("transfer-encoding", None)
-        
-        return StreamingResponse(
-            stream_response(),
-            status_code=response.status_code,
-            headers=resp_headers,
-        )
-    except httpx.RequestError:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "error": "Frontend is starting up. Please refresh in a few seconds.",
-            },
-        )
-
-
-# Root path: serve the frontend
-@app.get("/")
-async def root(request: Request):
-    """Serve the Next.js frontend at the root URL."""
-    return await _proxy_request(request, "")
-
-
-# Catch-all: forward all other unmatched paths to Next.js
-@app.api_route(
-    "/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
-)
-async def proxy_to_nextjs(request: Request, path: str):
-    """Proxy all unknown routes to the Next.js frontend."""
-    return await _proxy_request(request, path)
-
-
-# ---------------------------------------------------------------------------
 # Entry-point
 # ---------------------------------------------------------------------------
 
@@ -273,7 +196,7 @@ def main() -> None:
     uvicorn.run(
         "server.app:app",
         host="0.0.0.0",
-        port=int(os.getenv("PORT", "8000")),
+        port=int(os.getenv("PORT", "7860")),
         reload=False,
     )
 
