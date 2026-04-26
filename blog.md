@@ -1,6 +1,6 @@
 # from round 1 to finale: how we built CVE-Triage-Env
 
-*Meta × Scaler OpenEnv Hackathon 2026 — Sansyuh*
+*Meta × Scaler OpenEnv Hackathon 2026 - Sansyuh*
 
 ---
 
@@ -10,7 +10,7 @@ so i'm still building the same project. same idea, same domain, just taken much 
 
 ## what round 1 was
 
-round 1 was simple on paper. build an OpenEnv-compliant RL environment for a real-world task. i picked CVE triage — the process of figuring out which package version is affected by a vulnerability, whether the vulnerable method is actually invoked, and what the safe upgrade path is. built a FastAPI backend, four real CVE fixtures (Log4Shell, Text4Shell, Spring4Shell, Logback JNDI), and six tools the agent could call. partial-credit grader. basic reward. got it working, shipped it, got into the finale.
+round 1 was simple on paper. build an OpenEnv-compliant RL environment for a real-world task. i picked CVE triage - the process of figuring out which package version is affected by a vulnerability, whether the vulnerable method is actually invoked, and what the safe upgrade path is. built a FastAPI backend, four real CVE fixtures (Log4Shell, Text4Shell, Spring4Shell, Logback JNDI), and six tools the agent could call. partial-credit grader. basic reward. got it working, shipped it, got into the finale.
 
 done. or so i thought.
 
@@ -20,7 +20,7 @@ done. or so i thought.
 
 when i found out i made it to the finale, my first instinct was to just polish the round 1 code and call it a day. then i actually read the round 2 judging criteria. 40% of the score is environment innovation. that's not "make it cleaner." that's "build something that didn't exist before."
 
-so i started from scratch on the design — not the code, just the thinking. what's actually missing from what i built? what would make a judge from Meta or HuggingFace stop and say "this is different"?
+so i started from scratch on the design - not the code, just the thinking. what's actually missing from what i built? what would make a judge from Meta or HuggingFace stop and say "this is different"?
 
 i spent a few days just reading. went through around 20 papers across six topic areas:
 
@@ -59,7 +59,7 @@ i spent a few days just reading. went through around 20 papers across six topic 
 - https://idp.sairam.edu.in/idp/profile/SAML2/Redirect/SSO?execution=e1s3
 - https://ijsrm.net/index.php/ijsrm/article/view/4262
 
-the thing that jumped out across almost all of them — every RL environment for security assumes the information is clean. trustworthy APIs, accurate databases, honest tool outputs. none of them train an agent to function when the data is lying.
+the thing that jumped out across almost all of them - every RL environment for security assumes the information is clean. trustworthy APIs, accurate databases, honest tool outputs. none of them train an agent to function when the data is lying.
 
 that's the gap. that became round 2.
 
@@ -67,7 +67,7 @@ that's the gap. that became round 2.
 
 ## what we built
 
-the core idea: what if 25% of the tool results the agent gets are wrong — but wrong in a believable way?
+the core idea: what if 25% of the tool results the agent gets are wrong - but wrong in a believable way?
 
 not random noise. real version numbers that are one patch off. real package names from the same ecosystem. the kind of thing an analyst would actually get confused by because it looks correct on the surface.
 
@@ -77,13 +77,13 @@ one tool is never corrupted: `simulate_exploit`. it's the ground truth oracle. t
 
 then i rebuilt the reward function from scratch.
 
-**correctness** — did you get the right answer. 0.50 max.
+**correctness** - did you get the right answer. 0.50 max.
 
-**cross-verification** — did you consult at least two independent sources that agreed. 0.20. fires only if sources are different tools, not the same tool called twice.
+**cross-verification** - did you consult at least two independent sources that agreed. 0.20. fires only if sources are different tools, not the same tool called twice.
 
-**Brier score calibration** — every submission includes a confidence score. reward is `0.20 × (1 - (confidence - correctness)²)`. if you say 95% confident and you're wrong, you get almost nothing. if you say 10% confident and you're wrong, you keep most of it. this trains the agent to know when it doesn't know.
+**Brier score calibration** - every submission includes a confidence score. reward is `0.20 × (1 - (confidence - correctness)²)`. if you say 95% confident and you're wrong, you get almost nothing. if you say 10% confident and you're wrong, you keep most of it. this trains the agent to know when it doesn't know.
 
-**hallucination penalty** — submit a package name that doesn't exist in the ecosystem, take a -0.15 hit.
+**hallucination penalty** - submit a package name that doesn't exist in the ecosystem, take a -0.15 hit.
 
 four difficulty levels. easy gives the agent full information. medium redacts the version numbers. hard gives only the CVE ID and makes the agent reconstruct everything. expert adds the unreliable source warning and requires a patch suggestion on top of full triage.
 
@@ -91,35 +91,35 @@ four difficulty levels. easy gives the agent full information. medium redacts th
 
 ## the mistakes
 
-**mistake 1 — binary reward**
+**mistake 1 - binary reward**
 
 my very first reward function was right = 1.0, wrong = 0.0. ran 47 episodes. zero gradient movement. the agent had no idea how to improve its process, only that it was wrong. scrapped it, moved to partial credit.
 
-**mistake 2 — partial credit without cross-verification**
+**mistake 2 - partial credit without cross-verification**
 
 partial credit was better. the agent started calling multiple tools. but it would score 0.5, stop investigating, and submit. never learned to cross-check because there was no reward for cross-checking. added the cross-verification bonus. fixed.
 
-**mistake 3 — port mismatch**
+**mistake 3 - port mismatch**
 
 FastAPI was starting on port 7860. every TypeScript proxy route was calling localhost:8000. the frontend would have been completely dead on HuggingFace Spaces. would have found out during the live demo in front of the judges. caught it in testing.
 
-**mistake 4 — missing /close endpoint**
+**mistake 4 - missing /close endpoint**
 
 OpenEnv compliance requires a /close endpoint. i didn't have one. any automated OpenEnv validator would have flagged it immediately. added it.
 
-**mistake 5 — shallow copy on fixture data**
+**mistake 5 - shallow copy on fixture data**
 
-all four tool handlers were doing `dict(fixture["nvd_data"])` — a shallow copy. if anything downstream mutated the returned dict, it would corrupt the fixture for every subsequent call in the same process. changed to `copy.deepcopy()`.
+all four tool handlers were doing `dict(fixture["nvd_data"])` - a shallow copy. if anything downstream mutated the returned dict, it would corrupt the fixture for every subsequent call in the same process. changed to `copy.deepcopy()`.
 
-**mistake 6 — wrong python binary**
+**mistake 6 - wrong python binary**
 
 the DAST scanner called `python` instead of `python3`. ubuntu doesn't have a `python` binary. immediate runtime crash on the test machine.
 
-**mistake 7 — unused variable across all four tool handlers**
+**mistake 7 - unused variable across all four tool handlers**
 
 `maybe_corrupt()` returns three values. i was assigning the third to a variable called `level` in all four handlers and never using it. flags in every linter, does nothing. changed to `_`.
 
-**mistake 8 — reward weights**
+**mistake 8 - reward weights**
 
 calibration at 0.15 instead of 0.20 produced systematically overconfident agents. cross-verification at 0.10 instead of 0.20 meant agents occasionally skipped verification when the first result looked good. ran ablations. landed on 0.20 for both.
 
