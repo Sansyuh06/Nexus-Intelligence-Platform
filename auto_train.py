@@ -1,9 +1,8 @@
 """
 CVE-Triage-Env: Auto-Training Launcher
 =======================================
-Runs at Space startup when GPU is detected.
-Calls the proper GRPO training script (grpo_train.py) which
-connects to the live environment endpoint.
+Called from start.sh when GPU is detected.
+Installs deps then runs train_live.py (RSF on live environment data).
 """
 
 from __future__ import annotations
@@ -13,23 +12,21 @@ import subprocess
 import sys
 import time
 
-MODEL_DIR = "./grpo_model"
-MARKER = os.path.join(MODEL_DIR, "config.json")
-SPACE_URL = os.getenv("SPACE_URL", "https://sansyuh-cve-triage-env.hf.space")
+MARKER = "./cve_triage_model/config.json"
+SPACE_URL = os.getenv("SPACE_URL", "http://localhost:7860")
 
 
 def install_deps() -> None:
-    print("[train] Installing training dependencies...")
-    # Install PyTorch (CUDA 12.1)
+    print("[train] Installing dependencies...")
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "-q", "--no-cache-dir",
         "torch", "--index-url", "https://download.pytorch.org/whl/cu121",
     ])
-    # Install remaining packages (no trl, no SFT - uses plain Trainer/GRPO)
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "-q", "--no-cache-dir",
         "transformers>=4.40.0",
         "accelerate>=0.29.0",
+        "datasets>=2.18.0",
         "sentencepiece",
         "protobuf",
         "requests",
@@ -37,20 +34,21 @@ def install_deps() -> None:
     print("[train] Dependencies ready.")
 
 
-def wait_for_env(url: str, timeout: int = 120) -> bool:
-    """Wait for the FastAPI environment to be ready."""
+def wait_for_env(timeout: int = 120) -> bool:
+    """Wait until FastAPI responds to /health."""
     import requests as req
     deadline = time.time() + timeout
+    print(f"[train] Waiting for env at {SPACE_URL} (up to {timeout}s)...")
     while time.time() < deadline:
         try:
-            r = req.get(f"{url}/health", timeout=5)
+            r = req.get(f"{SPACE_URL}/health", timeout=5)
             if r.ok:
-                print(f"[train] Environment ready at {url}")
+                print(f"[train] Environment ready!")
                 return True
         except Exception:
             pass
         time.sleep(5)
-    print(f"[train] Environment not ready after {timeout}s")
+    print("[train] Environment did not respond in time.")
     return False
 
 
@@ -60,41 +58,33 @@ def main() -> None:
         return
 
     print("=" * 60)
-    print("  CVE-Triage-Env: GRPO Auto-Training")
-    print(f"  Space URL: {SPACE_URL}")
+    print("  CVE-Triage-Env: Starting Auto-Training")
+    print(f"  Using live env at {SPACE_URL}")
     print("=" * 60)
 
     try:
         install_deps()
 
-        # Wait for the FastAPI server to be up (it starts in parallel)
-        print("[train] Waiting for FastAPI environment to be ready...")
-        if not wait_for_env("http://localhost:7860", timeout=90):
-            # Fallback: try the public Space URL
-            if not wait_for_env(SPACE_URL, timeout=60):
-                raise RuntimeError("Environment not reachable, cannot train.")
+        if not wait_for_env():
+            raise RuntimeError("Environment unreachable")
 
-        # Set env var so grpo_train.py uses local server
-        env = {**os.environ, "SPACE_URL": "http://localhost:7860"}
-
-        print("[train] Launching GRPO training...")
+        env = {**os.environ, "SPACE_URL": SPACE_URL}
         result = subprocess.run(
-            [sys.executable, "grpo_train.py"],
+            [sys.executable, "train_live.py"],
             env=env,
         )
-
         if result.returncode != 0:
-            raise RuntimeError(f"GRPO training exited with code {result.returncode}")
+            raise RuntimeError(f"train_live.py exited with {result.returncode}")
 
         print("=" * 60)
-        print("  TRAINING COMPLETE")
+        print("  AUTO-TRAINING COMPLETE")
         print("=" * 60)
 
     except Exception as exc:
-        print(f"[train] ERROR: {exc}")
         import traceback
+        print(f"[train] ERROR: {exc}")
         traceback.print_exc()
-        print("[train] Training failed — servers will start anyway.")
+        print("[train] Training failed — servers will continue running.")
 
 
 if __name__ == "__main__":
