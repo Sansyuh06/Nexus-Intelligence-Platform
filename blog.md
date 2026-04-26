@@ -108,9 +108,14 @@ The trained agent learned three emergent behaviors we didn't explicitly program:
 
 We built a full interactive frontend where judges can run episodes themselves. Pick a difficulty, click actions, watch corruption events flash red in real-time, and see the reward breakdown after submission. It's not a demo video — it's a live environment running on real fixture data.
 
-### 🕐 Hour 20 — Hardening for Production
+### 🕐 Hour 20 — Automated Training on the Hub
 
-The final push: 23 automated tests (15 environment + 8 API), strict reward clamping (0.01–0.99), graceful error handling, OpenEnv compliance verification, and deployment to Hugging Face Spaces with dual-server architecture (FastAPI + Next.js).
+We implemented an automated training pipeline that triggers whenever the environment is deployed to a GPU instance. Instead of training on a static dataset, we used **Rejection Sampling SFT (RSF)**:
+1. The agent interacts with the **LIVE FastAPI endpoints** to collect episodes.
+2. We keep only "expert" trajectories where the agent correctly cross-verified and achieved a reward > 0.5.
+3. We fine-tune a **Qwen2.5-0.5B-Instruct** model on these high-quality trajectories.
+
+This ensures the model learns directly from the environment's specific adversarial logic, not just general security knowledge. Our final 23-test suite (15 environment + 8 API) confirms everything is production-ready.
 
 ---
 
@@ -159,7 +164,8 @@ We believe this approach generalizes beyond CVE triage. Any domain where LLMs in
 
 - **Live Demo:** [https://huggingface.co/spaces/Sansyuh/CVE-Triage-Env](https://huggingface.co/spaces/Sansyuh/CVE-Triage-Env)
 - **GitHub:** [https://github.com/Sansyuh06/Nexus-Intelligence-Platform](https://github.com/Sansyuh06/Nexus-Intelligence-Platform)
-- **Training Notebook:** `train_rl.ipynb` (GRPO with Qwen 2.5-7B via Unsloth)
+- **Training Script:** `train_live.py` (Automated RSF against live API)
+- **Results:** `cve_triage_model/training_results.json` (Baseline vs Trained)
 
 ---
 
