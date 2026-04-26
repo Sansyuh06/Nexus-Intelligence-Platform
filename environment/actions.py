@@ -181,11 +181,11 @@ class ActionHandler:
         return {
             "exploit_simulation": {
                 "step_1_method_exists": True,
-                "step_2_attack_vector_reachable": gt["invoked"],
-                "step_3_exploit_succeeds": gt["invoked"],
-                "vulnerable_method": gt["vulnerable_method"],
-                "vulnerable_class": gt["vulnerable_class"],
-                "safe_version": gt["safe_version"],
+                "step_2_attack_vector_reachable": gt.get("invoked", False),
+                "step_3_exploit_succeeds": gt.get("invoked", False),
+                "vulnerable_method": gt.get("vulnerable_method", "unknown"),
+                "vulnerable_class": gt.get("vulnerable_class", "unknown"),
+                "safe_version": gt.get("safe_version", "unknown"),
             },
             "is_ground_truth_oracle": True,
             "note": (
@@ -211,7 +211,7 @@ class ActionHandler:
         gt = fixture["ground_truth"]
         return {
             "recommended_action": "upgrade",
-            "current_safe_version": gt["safe_version"],
+            "current_safe_version": gt.get("safe_version", "unknown"),
             "patch_diff_available": True,
             "patch_diff_preview": fixture["patch_diff"][:200],
             "note": (

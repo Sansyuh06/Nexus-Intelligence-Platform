@@ -27,7 +27,7 @@ import requests
 
 # ── Config ────────────────────────────────────────────────────────
 SPACE_URL = os.getenv(
-    "SPACE_URL", "https://sansyuh-cve-triage-env.hf.space"
+    "SPACE_URL", "http://localhost:7860"
 ).rstrip("/")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-0.5B-Instruct")
 OUTPUT_DIR = "./grpo_model"
@@ -130,27 +130,35 @@ def run_episode(client: CVETriageClient, task_id: str, model, tokenizer, device)
                 "done": True,
             }
         else:
-            result = client.step(action_type, parameters)
-            obs = result["observation"]
-            step_reward = result["reward"]["value"]
+            try:
+                result = client.step(action_type, parameters)
+                obs = result["observation"]
+                step_reward = result["reward"]["value"]
+            except Exception:
+                step_reward = 0.01
             trajectory.append({
                 "prompt": prompt, "generated": generated,
                 "action": action_type, "reward": step_reward,
             })
 
-    # Ran out of steps without submitting — forced submit
-    result = client.step("submit", {
-        "group": obs.get("cve_metadata", {}).get("group", ""),
-        "artifact": obs.get("cve_metadata", {}).get("artifact", ""),
-        "safe_version": "",
-        "confidence": 0.3,
-    })
-    total_reward = result["reward"]["value"]
+    # Forced submit — ran out of steps
+    try:
+        result = client.step("submit", {
+            "group": obs.get("cve_metadata", {}).get("group", "") if isinstance(obs, dict) else "",
+            "artifact": obs.get("cve_metadata", {}).get("artifact", "") if isinstance(obs, dict) else "",
+            "safe_version": "",
+            "confidence": 0.3,
+        })
+        total_reward = result["reward"]["value"]
+        breakdown = result["reward"]["breakdown"]
+    except Exception:
+        total_reward = 0.01
+        breakdown = {"timeout": 0.01}
     return {
         "task": task_id,
         "steps": MAX_STEPS,
         "total_reward": total_reward,
-        "breakdown": result["reward"]["breakdown"],
+        "breakdown": breakdown,
         "trajectory": trajectory,
         "done": True,
     }
