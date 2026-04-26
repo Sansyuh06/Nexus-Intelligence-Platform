@@ -31,7 +31,7 @@ def install_deps():
     ])
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "--no-cache-dir", "-q",
-        "transformers>=4.41.0", "datasets>=2.19.0", "trl==0.9.4",
+        "transformers==4.43.3", "datasets>=2.19.0", "trl==0.9.4",
         "peft>=0.11.0", "accelerate>=0.30.0", "bitsandbytes>=0.43.0",
         "sentencepiece", "protobuf",
     ])
