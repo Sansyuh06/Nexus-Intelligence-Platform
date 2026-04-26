@@ -1,10 +1,10 @@
 # from round 1 to finale: how we built CVE-Triage-Env
 
-*Meta × Scaler OpenEnv Hackathon 2026 - Sansyuh*
+*Meta × Scaler OpenEnv Hackathon 2026 - "Pro"crastinators
 
 ---
 
-so i'm still building the same project. same idea, same domain, just taken much further than i thought it would go when i first submitted for round 1.
+so we still building the same project. same idea, same domain, just taken much further than we thought it would go when we first submitted for round 1.
 
 ---
 
@@ -12,17 +12,17 @@ so i'm still building the same project. same idea, same domain, just taken much 
 
 round 1 was simple on paper. build an OpenEnv-compliant RL environment for a real-world task. i picked CVE triage - the process of figuring out which package version is affected by a vulnerability, whether the vulnerable method is actually invoked, and what the safe upgrade path is. built a FastAPI backend, four real CVE fixtures (Log4Shell, Text4Shell, Spring4Shell, Logback JNDI), and six tools the agent could call. partial-credit grader. basic reward. got it working, shipped it, got into the finale.
 
-done. or so i thought.
+done. or so we thought.
 
 ---
 
 ## getting ready for round 2
 
-when i found out i made it to the finale, my first instinct was to just polish the round 1 code and call it a day. then i actually read the round 2 judging criteria. 40% of the score is environment innovation. that's not "make it cleaner." that's "build something that didn't exist before."
+when we found out we made it to the finale, my first instinct was to just polish the round 1 code and call it a day. then we actually read the round 2 judging criteria. 40% of the score is environment innovation. that's not "make it cleaner." that's "build something that didn't exist before."
 
-so i started from scratch on the design - not the code, just the thinking. what's actually missing from what i built? what would make a judge from Meta or HuggingFace stop and say "this is different"?
+so we started from scratch on the design - not the code, just the thinking. what's actually missing from what we built? what would make a judge from Meta or HuggingFace stop and say "this is different"?
 
-i spent a few days just reading. went through around 20 papers across six topic areas:
+we spent a few days just reading. went through around 20 papers across six topic areas:
 
 **RL for vulnerability detection and security:**
 - https://arxiv.org/abs/2309.03040
@@ -75,7 +75,7 @@ i called it the Unreliable World Engine. every tool call passes through a corrup
 
 one tool is never corrupted: `simulate_exploit`. it's the ground truth oracle. three-step exploit simulation. can't be bluffed. the agent learns to use it as a final verification gate before submitting.
 
-then i rebuilt the reward function from scratch.
+then we rebuilt the reward function from scratch.
 
 **correctness** - did you get the right answer. 0.50 max.
 
