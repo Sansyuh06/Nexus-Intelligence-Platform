@@ -4,8 +4,6 @@
 
 # Dependencies
 node_modules/
-package-lock.json
-uv.lock
 
 # Next.js
 .next/
@@ -35,10 +33,10 @@ security_assessment_report.pdf
 *.swp
 *.bak
 
-# Scratch / temp files
-parsed*.txt
-extract_pdf_clean.py
-read_pdf*.py
+# Scratch / dev-only files
 reaserouces/
 agents/
+temp_resources/
+python_tools/
 tsconfig.tsbuildinfo
+Dockerfile_jupyter
