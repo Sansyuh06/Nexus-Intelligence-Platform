@@ -27,7 +27,7 @@ def install_deps():
     print("[train] Installing PyTorch + training libs...")
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "--no-cache-dir", "-q",
-        "torch==2.3.0", "--index-url", "https://download.pytorch.org/whl/cu121",
+        "torch>=2.4.0", "--index-url", "https://download.pytorch.org/whl/cu121",
     ])
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "--no-cache-dir", "-q",
