@@ -148,7 +148,7 @@ def train(records: list[dict]) -> None:
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.float32,
         device_map="auto",
         trust_remote_code=True,
     )
@@ -173,7 +173,7 @@ def train(records: list[dict]) -> None:
         per_device_train_batch_size=4,
         gradient_accumulation_steps=2,
         learning_rate=2e-5,
-        fp16=True,
+        fp16=False,
         logging_steps=5,
         save_strategy="no",          # don't save checkpoints, only final
         report_to="none",
