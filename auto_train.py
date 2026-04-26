@@ -1,76 +1,88 @@
 """
 CVE-Triage-Env: Lightweight Auto-Training Script.
-Uses Qwen2.5-0.5B (smallest available) to minimize GPU credits.
-Runs automatically when GPU is detected at Space startup.
+Uses Qwen2.5-0.5B + plain HuggingFace Trainer (no trl dependency).
+Runs automatically on startup when GPU is detected.
 """
+
+from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-
-def check_gpu():
-    """Return True if CUDA GPU is available."""
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except ImportError:
-        return False
+MODEL_DIR = "./cve_triage_model"
+MARKER = os.path.join(MODEL_DIR, "config.json")
 
 
-def install_deps():
-    """Install training deps at runtime (keeps Docker image small)."""
-    import subprocess
-    print("[train] Installing PyTorch + training libs...")
+# ──────────────────────────────────────────────────────────────
+# Step 1: Install deps (only torch + transformers + datasets)
+# ──────────────────────────────────────────────────────────────
+
+def install_deps() -> None:
+    print("[train] Installing training dependencies...")
+
+    # Install PyTorch with CUDA 12.1 support
     subprocess.check_call([
-        sys.executable, "-m", "pip", "install", "--no-cache-dir", "-q",
-        "torch>=2.4.0", "--index-url", "https://download.pytorch.org/whl/cu121",
+        sys.executable, "-m", "pip", "install", "-q", "--no-cache-dir",
+        "torch", "--index-url", "https://download.pytorch.org/whl/cu121",
     ])
+
+    # Install transformers + datasets (only stable, widely-tested packages)
     subprocess.check_call([
-        sys.executable, "-m", "pip", "install", "--no-cache-dir", "-q",
-        "transformers==4.43.3", "datasets>=2.19.0", "trl==0.9.4",
-        "peft>=0.11.0", "accelerate>=0.30.0", "bitsandbytes>=0.43.0",
-        "sentencepiece", "protobuf",
+        sys.executable, "-m", "pip", "install", "-q", "--no-cache-dir",
+        "transformers>=4.40.0",
+        "datasets>=2.18.0",
+        "accelerate>=0.29.0",
+        "sentencepiece",
+        "protobuf",
     ])
+
     print("[train] Dependencies installed.")
 
 
-def generate_training_data():
-    """Generate episodes from the live environment."""
+# ──────────────────────────────────────────────────────────────
+# Step 2: Generate training episodes from live environment
+# ──────────────────────────────────────────────────────────────
+
+def generate_data() -> list[dict]:
     from environment.env import CVETriageEnv
     from environment.models import CVEAction
     from environment.tasks import TASKS
 
     episodes = []
     for task in TASKS:
-        for _ in range(15):  # 15 episodes per task = 60 total (lightweight)
+        for _ in range(15):   # 15 × 4 tasks = 60 total (lightweight)
             env = CVETriageEnv(task.task_id)
             obs = env.reset()
-            history = []
+            history: list[dict] = []
 
-            tools = ["search_nvd", "fetch_advisory", "lookup_gav", "search_method"]
-            for tool in tools:
+            for tool in ["search_nvd", "fetch_advisory", "lookup_gav", "search_method"]:
                 if obs.episode_done:
                     break
-                action = CVEAction(action_type=tool, parameters={})
-                obs, reward, done, info = env.step(action)
+                obs, reward, done, info = env.step(
+                    CVEAction(action_type=tool, parameters={})
+                )
                 history.append({
                     "tool": tool,
                     "output": str(obs.current_output)[:400],
-                    "corrupted": info.get("corruption_log", [{}])[-1].get("corrupted", False),
+                    "corrupted": (
+                        info.get("corruption_log", [{}])[-1].get("corrupted", False)
+                    ),
                 })
 
             if not obs.episode_done:
-                submit = CVEAction(action_type="submit", parameters={
-                    "group": task.ground_truth.get("group", ""),
-                    "artifact": task.ground_truth.get("artifact", ""),
-                    "safe_version": task.ground_truth.get("safe_version", ""),
-                    "confidence": 0.75,
-                })
-                obs, reward, done, info = env.step(submit)
+                obs, reward, done, info = env.step(
+                    CVEAction(action_type="submit", parameters={
+                        "group": task.ground_truth.get("group", ""),
+                        "artifact": task.ground_truth.get("artifact", ""),
+                        "safe_version": task.ground_truth.get("safe_version", ""),
+                        "confidence": 0.75,
+                    })
+                )
 
             episodes.append({
                 "task": task.task_id,
@@ -81,48 +93,53 @@ def generate_training_data():
                 "breakdown": reward.breakdown,
             })
 
-    print(f"[train] Generated {len(episodes)} training episodes")
+    print(f"[train] Generated {len(episodes)} episodes.")
     return episodes
 
 
-def format_for_sft(episodes):
-    """Convert episodes to instruction-following format."""
-    formatted = []
+# ──────────────────────────────────────────────────────────────
+# Step 3: Format as instruction-following text
+# ──────────────────────────────────────────────────────────────
+
+def format_data(episodes: list[dict]) -> list[dict]:
+    records = []
     for ep in episodes:
-        investigation = ""
+        inv = ""
         for h in ep["history"]:
             tag = " [CORRUPTED]" if h["corrupted"] else ""
-            investigation += f"Tool: {h['tool']}{tag}\nResult: {h['output'][:250]}\n\n"
+            inv += f"Tool: {h['tool']}{tag}\nResult: {h['output'][:250]}\n\n"
 
-        prompt = (
-            f"Investigate {ep['cve']} (difficulty: {ep['difficulty']}).\n"
-            f"Identify the vulnerable package (GAV), safe version, and method.\n\n"
-            f"Investigation log:\n{investigation}"
-        )
-
-        response = (
+        text = (
+            f"<|user|>\nInvestigate {ep['cve']} (difficulty: {ep['difficulty']}).\n"
+            f"Identify the vulnerable package GAV, safe version, and method.\n\n"
+            f"Investigation log:\n{inv}"
+            f"<|assistant|>\n"
             f"After cross-verifying {len(ep['history'])} sources:\n"
             f"Reward: {ep['final_reward']:.2f}\n"
-            f"Breakdown: {json.dumps(ep['breakdown'])}\n\n"
-            f"Key findings:\n"
-            f"- Consulted {len(ep['history'])} tools before submission\n"
-            f"- Corrupted sources detected: {sum(1 for h in ep['history'] if h['corrupted'])}\n"
-            f"- Calibrated confidence to 0.75 based on source agreement"
+            f"Breakdown: {json.dumps(ep['breakdown'])}\n"
+            f"Corrupted sources encountered: {sum(1 for h in ep['history'] if h['corrupted'])}\n"
+            f"Submitted with calibrated confidence: 0.75"
         )
-
-        formatted.append({"text": f"<|user|>\n{prompt}<|assistant|>\n{response}"})
-
-    return formatted
+        records.append({"text": text})
+    return records
 
 
-def train(formatted_data):
-    """Fine-tune Qwen2.5-0.5B-Instruct (tiny, fast, cheap)."""
+# ──────────────────────────────────────────────────────────────
+# Step 4: Fine-tune using plain HuggingFace Trainer (no trl)
+# ──────────────────────────────────────────────────────────────
+
+def train(records: list[dict]) -> None:
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    from trl import SFTTrainer, SFTConfig
     from datasets import Dataset
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        DataCollatorForLanguageModeling,
+        Trainer,
+        TrainingArguments,
+    )
 
-    model_name = "Qwen/Qwen2.5-0.5B-Instruct"  # 0.5B = minimal credits
+    model_name = "Qwen/Qwen2.5-0.5B-Instruct"  # smallest = minimal credits
     print(f"[train] Loading {model_name}...")
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
@@ -136,71 +153,90 @@ def train(formatted_data):
         trust_remote_code=True,
     )
 
-    dataset = Dataset.from_list(formatted_data)
-    print(f"[train] Dataset: {len(dataset)} examples")
+    # Tokenise
+    def tokenize(batch: dict) -> dict:
+        return tokenizer(
+            batch["text"],
+            truncation=True,
+            max_length=512,
+            padding=False,
+        )
 
-    training_args = SFTConfig(
-        output_dir="./cve_triage_model",
-        num_train_epochs=2,  # 2 epochs = fast
+    dataset = Dataset.from_list(records)
+    tokenized = dataset.map(tokenize, batched=True, remove_columns=["text"])
+
+    collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+    args = TrainingArguments(
+        output_dir=MODEL_DIR,
+        num_train_epochs=2,
         per_device_train_batch_size=4,
         gradient_accumulation_steps=2,
         learning_rate=2e-5,
         fp16=True,
         logging_steps=5,
-        save_steps=100,
-        max_seq_length=512,
-        dataset_text_field="text",
+        save_strategy="no",          # don't save checkpoints, only final
         report_to="none",
     )
 
-    trainer = SFTTrainer(
+    trainer = Trainer(
         model=model,
-        train_dataset=dataset,
-        tokenizer=tokenizer,
-        args=training_args,
+        args=args,
+        train_dataset=tokenized,
+        data_collator=collator,
     )
 
-    print("[train] Starting fine-tuning...")
-    start = time.time()
+    print("[train] Fine-tuning started...")
+    t0 = time.time()
     trainer.train()
-    elapsed = time.time() - start
-    print(f"[train] Training complete in {elapsed:.0f}s")
+    elapsed = round(time.time() - t0)
+    print(f"[train] Training done in {elapsed}s.")
 
-    trainer.save_model("./cve_triage_model")
-    tokenizer.save_pretrained("./cve_triage_model")
-    print("[train] Model saved to ./cve_triage_model")
+    trainer.save_model(MODEL_DIR)
+    tokenizer.save_pretrained(MODEL_DIR)
 
-    # Save training metadata for the blog
-    with open("training_results.json", "w") as f:
+    with open(os.path.join(MODEL_DIR, "training_results.json"), "w") as f:
         json.dump({
             "model": model_name,
             "epochs": 2,
-            "examples": len(dataset),
-            "training_time_seconds": round(elapsed),
-            "device": str(torch.cuda.get_device_name(0)) if torch.cuda.is_available() else "cpu",
+            "examples": len(records),
+            "training_time_seconds": elapsed,
+            "device": (
+                torch.cuda.get_device_name(0)
+                if torch.cuda.is_available() else "cpu"
+            ),
         }, f, indent=2)
-    print("[train] Metadata saved to training_results.json")
+
+    print(f"[train] Model saved to {MODEL_DIR}")
 
 
-def main():
-    """Entry point — called from start.sh when GPU detected."""
-    marker = "./cve_triage_model/config.json"
-    if os.path.exists(marker):
-        print("[train] Model already exists, skipping training.")
+# ──────────────────────────────────────────────────────────────
+# Entry point
+# ──────────────────────────────────────────────────────────────
+
+def main() -> None:
+    if os.path.exists(MARKER):
+        print("[train] Model already exists — skipping training.")
         return
 
     print("=" * 60)
-    print("  CVE-Triage-Env: Auto-Training (Qwen2.5-0.5B)")
+    print("  CVE-Triage-Env Auto-Training (Qwen2.5-0.5B)")
     print("=" * 60)
 
-    install_deps()
-    episodes = generate_training_data()
-    formatted = format_for_sft(episodes)
-    train(formatted)
-
-    print("=" * 60)
-    print("  TRAINING COMPLETE — starting servers now")
-    print("=" * 60)
+    try:
+        install_deps()
+        episodes = generate_data()
+        records = format_data(episodes)
+        train(records)
+        print("=" * 60)
+        print("  TRAINING COMPLETE")
+        print("=" * 60)
+    except Exception as exc:
+        # Never block the servers from starting
+        print(f"[train] ERROR: {exc}")
+        import traceback
+        traceback.print_exc()
+        print("[train] Training failed — continuing to start servers anyway.")
 
 
 if __name__ == "__main__":
