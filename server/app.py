@@ -182,6 +182,56 @@ async def health_check() -> HealthResponse:
 
 
 # ---------------------------------------------------------------------------
+# Proxy to Next.js Frontend
+# ---------------------------------------------------------------------------
+import httpx
+from fastapi import Request
+from fastapi.responses import StreamingResponse
+
+NEXTJS_URL = "http://127.0.0.1:3000"
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
+async def proxy_to_nextjs(request: Request, path: str):
+    """Proxy all unknown routes to the Next.js frontend."""
+    url = f"{NEXTJS_URL}/{path}"
+    try:
+        # Build the request, excluding the 'host' header to avoid conflict
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        
+        # Read the body if present
+        body = await request.body()
+        
+        client = httpx.AsyncClient(base_url=NEXTJS_URL, timeout=60.0)
+        req = client.build_request(
+            request.method,
+            url,
+            headers=headers,
+            content=body,
+        )
+        response = await client.send(req, stream=True)
+        
+        async def stream_generator():
+            async for chunk in response.aiter_raw():
+                yield chunk
+
+        # Remove chunking headers from the proxy response
+        resp_headers = dict(response.headers)
+        resp_headers.pop("content-encoding", None)
+        resp_headers.pop("content-length", None)
+        
+        return StreamingResponse(
+            stream_generator(),
+            status_code=response.status_code,
+            headers=resp_headers,
+            background=client.aclose,
+        )
+    except httpx.RequestError as exc:
+        return {"error": "Frontend is temporarily unavailable or starting up.", "details": str(exc)}
+
+
+
+# ---------------------------------------------------------------------------
 # Entry-point
 # ---------------------------------------------------------------------------
 

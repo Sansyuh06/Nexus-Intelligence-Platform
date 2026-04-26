@@ -2,10 +2,10 @@
 
 echo "Starting servers..."
 
-# Start FastAPI server in background (runs on internal port 8001)
-FASTAPI_PORT=8001
+# Start FastAPI server in background (reads PORT from env, defaults to 8000)
+FASTAPI_PORT="${PORT:-8000}"
 echo "Starting FastAPI on port $FASTAPI_PORT..."
-python3 -m uvicorn server.app:app --host 127.0.0.1 --port "$FASTAPI_PORT" &
+python3 -m uvicorn server.app:app --host 0.0.0.0 --port "$FASTAPI_PORT" &
 FASTAPI_PID=$!
 echo "FastAPI started with PID $FASTAPI_PID"
 
@@ -21,10 +21,9 @@ else
     exit 1
 fi
 
-# Start Next.js server on public port (reads PORT from env, defaults to 8000)
-NEXTJS_PORT="${PORT:-8000}"
-echo "Starting Next.js on port $NEXTJS_PORT..."
-export PORT=$NEXTJS_PORT
+# Start Next.js server in production mode on internal port 3000
+echo "Starting Next.js on port 3000..."
+export PORT=3000
 npm start &
 
 # Wait for FastAPI so container doesn't exit
