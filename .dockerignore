@@ -3,7 +3,19 @@ node_modules
 .env
 .env.local
 *.log
-build.log
-ts_error.log
 scan_results.json
 security_assessment_report.pdf
+
+# Dev / scratch files
+__pycache__
+.pytest_cache
+.git
+.vscode
+.idea
+reaserouces
+agents
+temp_resources
+python_tools
+tsconfig.tsbuildinfo
+Dockerfile_jupyter
+*.pyc
