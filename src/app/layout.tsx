@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CVE-Triage-Env — Adversarial Security Reasoning",
-  description: "An RL environment training AI agents to investigate CVEs under unreliable information conditions.",
+  description: "An RL environment training AI agents to investigate CVEs under unreliable information conditions. Meta OpenEnv Hackathon 2026.",
 };
 
 export default function RootLayout({
@@ -25,9 +25,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-[#0a0a0f]">{children}</body>
     </html>
   );
 }
