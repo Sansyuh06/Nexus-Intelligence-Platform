@@ -45,8 +45,8 @@ def main():
         f"Should clamp to 0.0, got {reward_min.value}"
     )
     print(
-        f"  Clamping: [-0.5 → {reward_min.value}], "
-        f"[1.5 → {reward_max.value}]"
+        f"  Clamping: [-0.5 -> {reward_min.value}], "
+        f"[1.5 -> {reward_max.value}]"
     )
 
     # Test 3: Tasks (4 now including expert)
