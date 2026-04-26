@@ -23,19 +23,19 @@ npx next start -H 0.0.0.0 -p ${PORT:-8000} &
 NEXTJS_PID=$!
 echo "Next.js PID: $NEXTJS_PID"
 
-# Auto-train if GPU is available and model doesn't exist yet
+# Start training if GPU is available and model doesn't exist yet
 if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "GPU detected: $(nvidia-smi --query-gpu=name --format=csv,noheader)"
-    if [ ! -f "./grpo_model/config.json" ]; then
-        echo "No trained model found — starting GRPO auto-training in background..."
-        python3 auto_train.py &
+    if [ ! -f "./cve_triage_model/config.json" ]; then
+        echo "Starting RSF training pipeline against live environment..."
+        python3 train_live.py &
         TRAIN_PID=$!
         echo "Training PID: $TRAIN_PID"
     else
         echo "Trained model already exists, skipping training."
     fi
 else
-    echo "No GPU — skipping auto-training."
+    echo "No GPU detected — running in inference-only mode."
 fi
 
 # Keep container alive waiting for FastAPI

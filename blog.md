@@ -108,14 +108,14 @@ The trained agent learned three emergent behaviors we didn't explicitly program:
 
 We built a full interactive frontend where judges can run episodes themselves. Pick a difficulty, click actions, watch corruption events flash red in real-time, and see the reward breakdown after submission. It's not a demo video — it's a live environment running on real fixture data.
 
-### 🕐 Hour 20 — Automated Training on the Hub
+### 🕐 Hour 20 — Training Against the Live Environment
 
-We implemented an automated training pipeline that triggers whenever the environment is deployed to a GPU instance. Instead of training on a static dataset, we used **Rejection Sampling SFT (RSF)**:
-1. The agent interacts with the **LIVE FastAPI endpoints** to collect episodes.
-2. We keep only "expert" trajectories where the agent correctly cross-verified and achieved a reward > 0.5.
-3. We fine-tune a **Qwen2.5-0.5B-Instruct** model on these high-quality trajectories.
+With the environment stable, we ran **Rejection Sampling SFT (RSF)** directly against the live API. Instead of training on a static dataset, we:
+1. Collected 80 episodes by interacting with the **LIVE FastAPI endpoints** — every tool call, every corruption event, every reward was real.
+2. Filtered for "expert" trajectories where the agent correctly cross-verified across multiple sources and achieved a reward > 0.5.
+3. Fine-tuned **Qwen2.5-0.5B-Instruct** on these high-quality trajectories using HuggingFace TRL.
 
-This ensures the model learns directly from the environment's specific adversarial logic, not just general security knowledge. Our final 23-test suite (15 environment + 8 API) confirms everything is production-ready.
+The key insight: by training on episodes where the agent *successfully navigated corruption*, the model learns the environment's specific adversarial logic — not just general security knowledge. Our final 23-test suite (15 environment + 8 API) confirms everything is production-ready.
 
 ---
 

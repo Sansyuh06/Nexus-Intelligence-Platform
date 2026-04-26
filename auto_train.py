@@ -1,8 +1,8 @@
 """
-CVE-Triage-Env: Auto-Training Launcher
-=======================================
-Called from start.sh when GPU is detected.
-Installs deps then runs train_live.py (RSF on live environment data).
+CVE-Triage-Env: Training Launcher
+==================================
+Installs GPU dependencies and runs train_live.py
+(Rejection Sampling SFT against the live environment API).
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def main() -> None:
         return
 
     print("=" * 60)
-    print("  CVE-Triage-Env: Starting Auto-Training")
+    print("  CVE-Triage-Env: Starting Training Pipeline")
     print(f"  Using live env at {SPACE_URL}")
     print("=" * 60)
 
@@ -77,7 +77,7 @@ def main() -> None:
             raise RuntimeError(f"train_live.py exited with {result.returncode}")
 
         print("=" * 60)
-        print("  AUTO-TRAINING COMPLETE")
+        print("  TRAINING COMPLETE")
         print("=" * 60)
 
     except Exception as exc:
