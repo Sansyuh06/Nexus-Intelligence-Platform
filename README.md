@@ -1,5 +1,15 @@
 
 
+---
+title: CVE-Triage-Env
+emoji: 🛡️
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
 # CVE-Triage-Env
 
 **an RL environment that teaches LLMs to distrust their own tools — and get better at security triage because of it.**
