@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  /* No standalone — we use `next start` in the container */
 };
 
 export default nextConfig;
