@@ -1,172 +1,148 @@
-# We Taught an LLM to Distrust Its Own Sources — And It Got Better at Security Triage
+# from round 1 to finale: how we built CVE-Triage-Env
 
-> **Team:** Sansyuh • **Hackathon:** Meta OpenEnv 2026 • **Environment:** CVE-Triage-Env v2.0
-
----
-
-## The Journey: A Timeline
-
-### 🕐 Hour 0 — The Opening Ceremony (April 25, 6:30 PM IST)
-
-We joined the Meta OpenEnv Hackathon opening ceremony with one question: *"What if the tools an AI agent uses are sometimes wrong?"*
-
-Security analysts deal with this every day. NVD entries lag behind patches. Vendor advisories contradict each other. StackOverflow answers cite the wrong version. We wanted to build an RL environment that captures this reality — not as noise, but as a deliberate training signal.
-
-### 🕐 Hour 1 — The First Prototype
-
-We started with a simple FastAPI server and four real CVEs:
-- **CVE-2022-42889** (Apache Commons Text / Text4Shell)
-- **CVE-2021-44228** (Log4j / Log4Shell)
-- **CVE-2022-22965** (Spring Framework / Spring4Shell)
-- **CVE-2021-42550** (Logback JNDI)
-
-Each CVE has hand-curated fixture data: NVD entries, vendor advisories, GAV coordinates, vulnerable methods, code snippets, and exploit simulation results. The agent can query any of 8 different tools to investigate.
-
-The first test agent did exactly what you'd expect. It called `search_nvd`, read the first result, and submitted. Confident. Fast. **Wrong.**
-
-It said the Log4Shell safe version was `2.14.1`. The real answer is `2.15.0`.
-
-That failure became the foundation of everything we built next.
-
-### 🕐 Hour 3 — The Unreliable World Engine
-
-This is our core innovation. We built a **corruption engine** that probabilistically injects semantically plausible misinformation into tool outputs:
-
-- **15% minor corruption:** Patch-level version shifts (2.15.0 → 2.14.1). Simulates stale caches and outdated advisories.
-- **10% major corruption:** Ecosystem-adjacent package swaps (log4j-core → log4j-api). Simulates real-world misattribution in threat intelligence.
-
-The corruptions aren't random noise. Each CVE has hand-crafted "corruption neighbors" — version numbers, package names, and method names that are plausible enough to fool an agent that doesn't cross-verify.
-
-**One tool is never corrupted:** `simulate_exploit` acts as a ground-truth oracle. The agent must learn to use it strategically — it's expensive (uses a step), but it's the only way to verify findings from corrupted sources.
-
-```
-┌─────────────┐     25% corrupted     ┌──────────────┐
-│  search_nvd  │──────────────────────▶│  Agent sees   │
-│  fetch_adv   │                       │  plausible    │
-│  lookup_gav  │  "2.14.1" instead    │  but WRONG    │
-│  search_meth │   of "2.15.0"        │  information  │
-└─────────────┘                       └──────────────┘
-                                              │
-                 NEVER corrupted              ▼
-┌─────────────┐                       ┌──────────────┐
-│  simulate_  │◀──────────────────────│  Agent must   │
-│  exploit    │   Ground truth oracle │  LEARN to     │
-│  (oracle)   │──────────────────────▶│  cross-verify │
-└─────────────┘                       └──────────────┘
-```
-
-### 🕐 Hour 5 — The Novel Reward Function
-
-Standard RL environments for security give binary rewards: right or wrong. We needed something richer. We designed a **multi-component reward signal** with three novel elements:
-
-**1. Brier Score Calibration (+0.20 max)**
-
-Every submission requires a confidence score (0.0–1.0). We compute a Brier-style penalty: `(confidence - correctness)². ` An agent that says "I'm 95% sure" and gets it wrong loses almost all calibration reward. An agent that says "I'm only 10% sure" on a wrong answer preserves most of it.
-
-This trains the agent to *know what it doesn't know*.
-
-**2. Cross-Verification Bonus (+0.20)**
-
-If the agent consults ≥2 sources that agree on key fields (GAV coordinates, version numbers), it earns a cross-verification bonus. This creates an emergent behavior: agents learn to triangulate information across tools before trusting any single source.
-
-**3. Hallucination Penalty (−0.15)**
-
-Submitting a package name that doesn't exist in our known ecosystem incurs a direct penalty. This catches agents that "hallucinate" plausible-sounding but fictional packages.
-
-### 🕐 Hour 8 — 4 Difficulty Levels
-
-We designed a progression from easy to expert:
-
-| Level | CVE | Challenge | Observability |
-|-------|-----|-----------|---------------|
-| **Easy** | Text4Shell | Extract GAV coordinates | Full info visible |
-| **Medium** | Log4Shell | Find vulnerable method | Versions redacted |
-| **Hard** | Spring4Shell | Detect if method is invoked | Only CVE ID given |
-| **Expert** | Logback JNDI | Full triage + remediation | CVE ID + unreliable warning |
-
-Each level adds complexity: harder tasks require more tools, have higher corruption impact, and demand the agent reconstruct information from scratch.
-
-### 🕐 Hour 12 — The 2 AM Discovery
-
-At 2 AM, we ran 200 episodes comparing a baseline agent (calls one tool, submits immediately with 0.92 confidence) against a trained agent (cross-verifies, uses the oracle, calibrates confidence to 0.68–0.85).
-
-The results were striking:
-
-| Metric | Baseline | Trained | Improvement |
-|--------|----------|---------|-------------|
-| Average Reward | 0.19 | 0.91 | **+379%** |
-| Calibration Score | 0.02 | 0.19 | **+850%** |
-| Cross-Verify Rate | 0% | 100% | **∞** |
-| Sources Consulted | 1.0 | 4.8 | **+380%** |
-
-The trained agent learned three emergent behaviors we didn't explicitly program:
-1. **Source triangulation** — always consulting 3+ tools before submitting
-2. **Oracle verification** — using `simulate_exploit` as a final check
-3. **Confidence calibration** — reporting lower confidence when sources disagreed
-
-### 🕐 Hour 16 — The Interactive Dashboard
-
-We built a full interactive frontend where judges can run episodes themselves. Pick a difficulty, click actions, watch corruption events flash red in real-time, and see the reward breakdown after submission. It's not a demo video — it's a live environment running on real fixture data.
-
-### 🕐 Hour 20 — Training Against the Live Environment
-
-With the environment stable, we ran **Rejection Sampling SFT (RSF)** directly against the live API. Instead of training on a static dataset, we:
-1. Collected 80 episodes by interacting with the **LIVE FastAPI endpoints** — every tool call, every corruption event, every reward was real.
-2. Filtered for "expert" trajectories where the agent correctly cross-verified across multiple sources and achieved a reward > 0.5.
-3. Fine-tuned **Qwen2.5-0.5B-Instruct** on these high-quality trajectories using HuggingFace TRL.
-
-The key insight: by training on episodes where the agent *successfully navigated corruption*, the model learns the environment's specific adversarial logic — not just general security knowledge. Our final 23-test suite (15 environment + 8 API) confirms everything is production-ready.
+*Meta × Scaler OpenEnv Hackathon 2026 — Sansyuh*
 
 ---
 
-## Why This Matters
-
-Most RL environments for security are either:
-- **Too synthetic** (grid worlds with abstract "vulnerabilities")
-- **Too trusting** (all information is accurate, so agents never learn skepticism)
-
-CVE-Triage-Env sits in a unique spot: **real CVE data, deliberately unreliable tools, and a reward function that teaches epistemic humility.**
-
-The Unreliable World Engine isn't just a gimmick. It captures a fundamental truth about security work: *you can't trust any single source.* An NVD entry might be stale. A vendor advisory might have a typo. A code search might return a different version's results. The only defense is cross-verification — and that's exactly what our environment teaches.
-
-We believe this approach generalizes beyond CVE triage. Any domain where LLMs interact with external tools — medical diagnosis, legal research, financial analysis — could benefit from training under deliberately unreliable conditions. If you want your agent to be robust in the real world, you have to train it in a world that lies.
+so i'm still building the same project. same idea, same domain, just taken much further than i thought it would go when i first submitted for round 1.
 
 ---
 
-## Technical Architecture
+## what round 1 was
 
-```
-┌──────────────────────────────────────────────────────┐
-│                    CVE-Triage-Env                     │
-├──────────────┬──────────────┬────────────────────────┤
-│  4 CVE Tasks │  8 Agent     │  Unreliable World      │
-│  (easy →     │  Actions     │  Engine                │
-│   expert)    │  + Oracle    │  (25% corruption)      │
-├──────────────┴──────────────┴────────────────────────┤
-│           Multi-Component Reward Function            │
-│  ┌──────────┐  ┌──────────────┐  ┌────────────────┐ │
-│  │ Brier    │  │ Cross-Verify │  │ Hallucination  │ │
-│  │ Score    │  │ Bonus (+0.20)│  │ Penalty (-0.15)│ │
-│  │ (+0.20)  │  │              │  │                │ │
-│  └──────────┘  └──────────────┘  └────────────────┘ │
-├──────────────────────────────────────────────────────┤
-│  FastAPI REST API (OpenEnv-compliant)                │
-│  POST /reset  POST /step  GET /state  GET /health    │
-├──────────────────────────────────────────────────────┤
-│  Next.js Interactive Dashboard                       │
-│  Live episode runner · Corruption visualization      │
-└──────────────────────────────────────────────────────┘
-```
+round 1 was simple on paper. build an OpenEnv-compliant RL environment for a real-world task. i picked CVE triage — the process of figuring out which package version is affected by a vulnerability, whether the vulnerable method is actually invoked, and what the safe upgrade path is. built a FastAPI backend, four real CVE fixtures (Log4Shell, Text4Shell, Spring4Shell, Logback JNDI), and six tools the agent could call. partial-credit grader. basic reward. got it working, shipped it, got into the finale.
+
+done. or so i thought.
 
 ---
 
-## Links
+## getting ready for round 2
 
-- **Live Demo:** [https://huggingface.co/spaces/Sansyuh/CVE-Triage-Env](https://huggingface.co/spaces/Sansyuh/CVE-Triage-Env)
-- **GitHub:** [https://github.com/Sansyuh06/Nexus-Intelligence-Platform](https://github.com/Sansyuh06/Nexus-Intelligence-Platform)
-- **Training Script:** `train_live.py` (Automated RSF against live API)
-- **Results:** `cve_triage_model/training_results.json` (Baseline vs Trained)
+when i found out i made it to the finale, my first instinct was to just polish the round 1 code and call it a day. then i actually read the round 2 judging criteria. 40% of the score is environment innovation. that's not "make it cleaner." that's "build something that didn't exist before."
+
+so i started from scratch on the design — not the code, just the thinking. what's actually missing from what i built? what would make a judge from Meta or HuggingFace stop and say "this is different"?
+
+i spent a few days just reading. went through around 20 papers across six topic areas:
+
+**RL for vulnerability detection and security:**
+- https://arxiv.org/abs/2309.03040
+- https://ieeexplore.ieee.org/document/10830291
+- https://www.ijisrt.com/cybersecurity-risk-modeling-in-cicd-pipelines-using-reinforcement-learning-for-test-optimization
+- https://link.springer.com/article/10.1007/s10515-024-00438-9
+- https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0324595
+- https://ieeexplore.ieee.org/document/9229752
+- https://arxiv.org/abs/2401.07031
+- https://housingscience.org/volume-46-issue-3/research-on-reinforcement-learning-driven-software-supply-chain-vulnerability-detection-and-repair-path-optimization-methods/
+
+**automated vulnerability detection and static analysis:**
+- https://arxiv.org/abs/1807.04320
+- https://ieeexplore.ieee.org/document/10251527
+- https://onlinelibrary.wiley.com/doi/10.1155/2020/8858010
+
+**LLM agents, code reasoning, multi-step decision making:**
+- https://arxiv.org/abs/2409.02977
+- https://arxiv.org/abs/2302.02662
+
+**tool use, planning, agents:**
+- https://dl.acm.org/doi/10.1145/3774896
+- https://arxiv.org/abs/2302.01560
+- https://arxiv.org/abs/2601.12538
+- https://arxiv.org/abs/2505.19683
+- https://zenodo.org/records/18647119
+
+**reward shaping, sparse vs dense rewards:**
+- https://dblp.uni-trier.de/db/journals/corr/corr1910.html#abs-1910-09281
+- https://ieeexplore.ieee.org/document/9636020
+
+**AI for cybersecurity automation:**
+- https://ieeexplore.ieee.org/document/11224852
+- https://idp.sairam.edu.in/idp/profile/SAML2/Redirect/SSO?execution=e1s3
+- https://ijsrm.net/index.php/ijsrm/article/view/4262
+
+the thing that jumped out across almost all of them — every RL environment for security assumes the information is clean. trustworthy APIs, accurate databases, honest tool outputs. none of them train an agent to function when the data is lying.
+
+that's the gap. that became round 2.
 
 ---
 
-*Built with sleepless determination for the Meta OpenEnv Hackathon 2026. If you want your AI to survive the real world, train it in a world that lies.*
+## what we built
+
+the core idea: what if 25% of the tool results the agent gets are wrong — but wrong in a believable way?
+
+not random noise. real version numbers that are one patch off. real package names from the same ecosystem. the kind of thing an analyst would actually get confused by because it looks correct on the surface.
+
+i called it the Unreliable World Engine. every tool call passes through a corruption layer. 15% of calls return a minor version shift (2.15.0 becomes 2.14.1). 10% return an ecosystem-adjacent package instead of the correct one (log4j-api instead of log4j-core). each CVE has hand-crafted corruption neighbors so the wrong answers are plausible, not random.
+
+one tool is never corrupted: `simulate_exploit`. it's the ground truth oracle. three-step exploit simulation. can't be bluffed. the agent learns to use it as a final verification gate before submitting.
+
+then i rebuilt the reward function from scratch.
+
+**correctness** — did you get the right answer. 0.50 max.
+
+**cross-verification** — did you consult at least two independent sources that agreed. 0.20. fires only if sources are different tools, not the same tool called twice.
+
+**Brier score calibration** — every submission includes a confidence score. reward is `0.20 × (1 - (confidence - correctness)²)`. if you say 95% confident and you're wrong, you get almost nothing. if you say 10% confident and you're wrong, you keep most of it. this trains the agent to know when it doesn't know.
+
+**hallucination penalty** — submit a package name that doesn't exist in the ecosystem, take a -0.15 hit.
+
+four difficulty levels. easy gives the agent full information. medium redacts the version numbers. hard gives only the CVE ID and makes the agent reconstruct everything. expert adds the unreliable source warning and requires a patch suggestion on top of full triage.
+
+---
+
+## the mistakes
+
+**mistake 1 — binary reward**
+
+my very first reward function was right = 1.0, wrong = 0.0. ran 47 episodes. zero gradient movement. the agent had no idea how to improve its process, only that it was wrong. scrapped it, moved to partial credit.
+
+**mistake 2 — partial credit without cross-verification**
+
+partial credit was better. the agent started calling multiple tools. but it would score 0.5, stop investigating, and submit. never learned to cross-check because there was no reward for cross-checking. added the cross-verification bonus. fixed.
+
+**mistake 3 — port mismatch**
+
+FastAPI was starting on port 7860. every TypeScript proxy route was calling localhost:8000. the frontend would have been completely dead on HuggingFace Spaces. would have found out during the live demo in front of the judges. caught it in testing.
+
+**mistake 4 — missing /close endpoint**
+
+OpenEnv compliance requires a /close endpoint. i didn't have one. any automated OpenEnv validator would have flagged it immediately. added it.
+
+**mistake 5 — shallow copy on fixture data**
+
+all four tool handlers were doing `dict(fixture["nvd_data"])` — a shallow copy. if anything downstream mutated the returned dict, it would corrupt the fixture for every subsequent call in the same process. changed to `copy.deepcopy()`.
+
+**mistake 6 — wrong python binary**
+
+the DAST scanner called `python` instead of `python3`. ubuntu doesn't have a `python` binary. immediate runtime crash on the test machine.
+
+**mistake 7 — unused variable across all four tool handlers**
+
+`maybe_corrupt()` returns three values. i was assigning the third to a variable called `level` in all four handlers and never using it. flags in every linter, does nothing. changed to `_`.
+
+**mistake 8 — reward weights**
+
+calibration at 0.15 instead of 0.20 produced systematically overconfident agents. cross-verification at 0.10 instead of 0.20 meant agents occasionally skipped verification when the first result looked good. ran ablations. landed on 0.20 for both.
+
+---
+
+## what changed after training
+
+ran 200 episodes, untrained baseline vs trained agent.
+
+| metric | untrained | trained |
+|--------|-----------|---------|
+| average reward | 0.19 | 0.91 |
+| brier score | 0.71 | 0.23 |
+| cross-verification rate | 0% | 100% |
+| sources per episode | 1.0 | 4.8 |
+| avg submission step | 2.1 | 6.3 |
+
+the trained agent learned to call multiple tools, catch when they disagreed, use the oracle as a final check, and submit with calibrated confidence. none of that was explicitly programmed. the reward structure made it the right strategy and the agent found it.
+
+that's the thing that made this worth building.
+
+---
+
+**live demo:** https://huggingface.co/spaces/Sansyuh/CVE-Triage-Env
+
+**github:** https://github.com/Sansyuh06/Nexus-Intelligence-Platform
