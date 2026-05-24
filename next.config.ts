@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     return [
       { source: "/reset", destination: `${fastapi}/reset` },
       { source: "/step", destination: `${fastapi}/step` },
+      { source: "/resilience/run", destination: `${fastapi}/resilience/run` },
       { source: "/state", destination: `${fastapi}/state` },
       { source: "/close", destination: `${fastapi}/close` },
       { source: "/tasks", destination: `${fastapi}/tasks` },

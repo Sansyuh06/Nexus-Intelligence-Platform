@@ -21,6 +21,15 @@ from pydantic import BaseModel
 from environment.models import CVEAction
 from environment.env import CVETriageEnv
 from environment.tasks import TASKS
+from environment.chaos import ChaosConfig
+from environment.resilient_agent import run_agent_simulation
+
+
+class ResilienceRunRequest(BaseModel):
+    task_id: str = "easy"
+    chaos_config: ChaosConfig
+    use_resilience: bool = True
+
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +195,20 @@ async def list_tasks() -> list[dict[str, Any]]:
 async def health_check() -> HealthResponse:
     """Health check endpoint."""
     return HealthResponse(status="ok", version="2.0.0")
+
+
+@app.post("/resilience/run")
+async def run_resilience_simulation(body: ResilienceRunRequest) -> dict[str, Any]:
+    """Execute a simulated agent run under configured chaos settings."""
+    try:
+        result = run_agent_simulation(
+            task_id=body.task_id,
+            chaos_config=body.chaos_config,
+            use_resilience=body.use_resilience,
+        )
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
