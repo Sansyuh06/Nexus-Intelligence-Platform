@@ -15,6 +15,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -23,6 +24,8 @@ from environment.env import CVETriageEnv
 from environment.tasks import TASKS
 from environment.chaos import ChaosConfig
 from environment.resilient_agent import run_agent_simulation
+import json
+import asyncio
 
 
 class ResilienceRunRequest(BaseModel):
@@ -156,7 +159,9 @@ async def reset_env(body: ResetRequest | None = None) -> dict[str, Any]:
 @app.post("/step")
 async def step_env(action: CVEAction) -> StepResponse:
     """Execute one agent action."""
-    env: CVETriageEnv = app.state.env
+    env: CVETriageEnv = getattr(app.state, "env", None)
+    if not env:
+        raise HTTPException(status_code=400, detail="Environment not initialized. Call /reset first.")
     try:
         obs, reward, done, info = env.step(action)
     except RuntimeError as exc:
@@ -173,15 +178,19 @@ async def step_env(action: CVEAction) -> StepResponse:
 @app.get("/state")
 async def get_state() -> dict[str, Any]:
     """Return the current environment state."""
-    env: CVETriageEnv = app.state.env
+    env: CVETriageEnv = getattr(app.state, "env", None)
+    if not env:
+        raise HTTPException(status_code=400, detail="Environment not initialized.")
     return env.state()
 
 
 @app.post("/close")
 async def close_env() -> dict[str, Any]:
     """Close the current episode and reset the environment."""
-    env: CVETriageEnv = app.state.env
-    env.reset()
+    env: CVETriageEnv = getattr(app.state, "env", None)
+    if env:
+        env.reset()
+        app.state.env = None
     return {"status": "closed", "message": "Environment reset and closed."}
 
 
@@ -199,16 +208,68 @@ async def health_check() -> HealthResponse:
 
 @app.post("/resilience/run")
 async def run_resilience_simulation(body: ResilienceRunRequest) -> dict[str, Any]:
-    """Execute a simulated agent run under configured chaos settings."""
+    """Run both naive and resilient agents under the same chaos settings.
+
+    Returns a combined result with both agent traces so the frontend
+    can render a side-by-side comparison from a single API call.
+    """
     try:
-        result = run_agent_simulation(
+        naive_result = run_agent_simulation(
             task_id=body.task_id,
             chaos_config=body.chaos_config,
-            use_resilience=body.use_resilience,
+            use_resilience=False,
         )
-        return result
+        resilient_result = run_agent_simulation(
+            task_id=body.task_id,
+            chaos_config=body.chaos_config,
+            use_resilience=True,
+        )
+        return {
+            "naive": naive_result,
+            "resilient": resilient_result,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+class BenchmarkRequest(BaseModel):
+    episodes: int = 20
+    task_id: str = "easy"
+
+@app.post("/benchmark")
+async def run_benchmark(body: BenchmarkRequest):
+    """Run a live benchmark comparing naive vs resilient agent over multiple episodes."""
+    async def event_generator():
+        chaos_config = ChaosConfig(llm_failure_rate=0.2, rate_limit_rate=0.2, tool_failure_rate=0.2)
+        yield f"data: {json.dumps({'status': 'started', 'episodes': body.episodes, 'task': body.task_id})}\n\n"
+        
+        naive_rewards = []
+        resilient_rewards = []
+
+        for i in range(body.episodes):
+            await asyncio.sleep(0.01) # Small delay to yield to event loop
+            try:
+                naive_res = run_agent_simulation(body.task_id, chaos_config, use_resilience=False)
+                resilient_res = run_agent_simulation(body.task_id, chaos_config, use_resilience=True)
+                
+                naive_reward = naive_res.get("final_reward", 0.0)
+                resilient_reward = resilient_res.get("final_reward", 0.0)
+                
+                naive_rewards.append(naive_reward)
+                resilient_rewards.append(resilient_reward)
+
+                yield f"data: {json.dumps({'episode': i+1, 'naive_reward': naive_reward, 'resilient_reward': resilient_reward})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'episode': i+1, 'error': str(e)})}\n\n"
+
+        avg_naive = sum(naive_rewards) / len(naive_rewards) if naive_rewards else 0.0
+        avg_resilient = sum(resilient_rewards) / len(resilient_rewards) if resilient_rewards else 0.0
+        
+        yield f"data: {json.dumps({'status': 'completed', 'avg_naive': avg_naive, 'avg_resilient': avg_resilient})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # ---------------------------------------------------------------------------

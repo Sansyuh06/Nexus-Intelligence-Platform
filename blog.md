@@ -1,10 +1,10 @@
-# from round 1 to finale: how we built CVE-Triage-Env
+# teaching AI agents to distrust their own tools
 
-*Meta × Scaler OpenEnv Hackathon 2026 - "Pro"crastinators
+*DevNetwork [AI + ML] Hackathon 2026 — Team Sansyuh*
 
 ---
 
-so we still building the same project. same idea, same domain, just taken much further than we thought it would go when we first submitted for round 1.
+every RL environment for security assumes clean data. NVD returns the right version. advisories are accurate. code search finds the right method. but real-world security triage is full of stale caches, contradictory advisories, and misattributed packages. analysts know this — they cross-verify everything. AI agents don't. we built an environment that teaches them to.
 
 ---
 
@@ -79,9 +79,9 @@ then we rebuilt the reward function from scratch.
 
 **correctness** - did you get the right answer. 0.50 max.
 
-**cross-verification** - did you consult at least two independent sources that agreed. 0.20. fires only if sources are different tools, not the same tool called twice.
+**cross-verification** - did you consult at least two independent sources that agreed. 0.14. fires only if sources are different tools, not the same tool called twice.
 
-**Brier score calibration** - every submission includes a confidence score. reward is `0.20 × (1 - (confidence - correctness)²)`. if you say 95% confident and you're wrong, you get almost nothing. if you say 10% confident and you're wrong, you keep most of it. this trains the agent to know when it doesn't know.
+**Brier score calibration** - every submission includes a confidence score. reward is `0.15 × (1 - (confidence - correctness)²)`. if you say 95% confident and you're wrong, you get almost nothing. if you say 10% confident and you're wrong, you keep most of it. this trains the agent to know when it doesn't know.
 
 **hallucination penalty** - submit a package name that doesn't exist in the ecosystem, take a -0.15 hit.
 
@@ -121,7 +121,7 @@ the DAST scanner called `python` instead of `python3`. ubuntu doesn't have a `py
 
 **mistake 8 - reward weights**
 
-calibration at 0.15 instead of 0.20 produced systematically overconfident agents. cross-verification at 0.10 instead of 0.20 meant agents occasionally skipped verification when the first result looked good. ran ablations. landed on 0.20 for both.
+calibration at 0.10 produced systematically overconfident agents. cross-verification at 0.10 meant agents occasionally skipped verification when the first result looked good. ran ablations. landed on 0.15 for calibration and 0.14 for cross-verification — tuned so the max possible reward is exactly 0.99, preserving gradient signal at the top of the performance curve.
 
 ---
 

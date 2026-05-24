@@ -78,7 +78,7 @@ class Grader:
         confidence = min(1.0, max(0.0, confidence))
         correctness = self._compute_correctness(gt, submission)
         brier_penalty = (confidence - correctness) ** 2
-        calibration = 0.20 * (1.0 - brier_penalty)
+        calibration = 0.15 * (1.0 - brier_penalty)
         breakdown["calibration"] = round(calibration, 4)
         if calibration > 0.10:
             messages.append(
@@ -93,9 +93,9 @@ class Grader:
 
         # 2. Cross-Verification Bonus
         if cross_verified and num_sources >= 2:
-            breakdown["cross_verification"] = 0.20
+            breakdown["cross_verification"] = 0.14
             messages.append(
-                f"Cross-verified across {num_sources} sources (+0.20)"
+                f"Cross-verified across {num_sources} sources (+0.14)"
             )
         else:
             breakdown["cross_verification"] = 0.0
@@ -121,9 +121,8 @@ class Grader:
             breakdown["hallucination_penalty"] = 0.0
 
         raw = sum(breakdown.values())
-        clamped = min(0.99, max(0.01, raw))
         return CVEReward(
-            value=clamped,
+            value=raw,
             breakdown=breakdown,
             message="; ".join(messages) if messages else "No scoring details.",
         )

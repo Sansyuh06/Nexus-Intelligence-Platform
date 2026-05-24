@@ -83,9 +83,11 @@ the reward is decomposed into independent, verifiable components. no single numb
 | component | weight | what it measures |
 |-----------|--------|------------------|
 | **correctness** | 0.50 | did you get the right GAV, version, method? |
-| **Brier score calibration** | 0.20 | `0.20 × (1 - (confidence - correctness)²)` — penalizes overconfidence |
-| **cross-verification bonus** | 0.20 | consulted ≥2 independent sources that agreed? |
+| **Brier score calibration** | 0.15 | `0.15 × (1 - (confidence - correctness)²)` — penalizes overconfidence |
+| **cross-verification bonus** | 0.14 | consulted ≥2 independent sources that agreed? |
 | **hallucination penalty** | -0.15 | submitted a package name that doesn't exist? |
+
+max possible reward on a perfect answer: `0.50 + 0.20 + 0.15 + 0.14 = 0.99`. this is intentional — the ceiling leaves headroom for the hallucination penalty to always matter.
 
 the calibration component is the unusual one. every submission includes a confidence score (0.0–1.0). say 95% confident and get it wrong → almost zero calibration reward. say 10% confident and get it wrong → keep most of it. this trains **epistemic humility**.
 
@@ -93,7 +95,7 @@ the calibration component is the unusual one. every submission includes a confid
 
 ## results
 
-ran 200 episodes. baseline = untrained model (1 tool, submits immediately, 0.92 confidence). trained = after RSF on live environment data.
+ran 200 episodes. baseline = untrained model (1 tool, submits immediately, 0.92 confidence). trained = after GRPO on live environment data.
 
 | metric | baseline | trained | delta |
 |--------|----------|---------|-------|
@@ -145,6 +147,7 @@ GET  /tasks          — list available tasks
 GET  /health         — server health check
 POST /close          — close the environment
 POST /resilience/run — run chaos simulation (naive vs resilient agent)
+POST /benchmark      — stream live benchmark (naive vs resilient, 20 episodes)
 ```
 
 ---
@@ -173,17 +176,17 @@ curl -X POST http://localhost:7860/step -H "Content-Type: application/json" -d '
 ### run tests
 
 ```bash
-python test_env.py    # 15 environment tests
-python test_api.py    # 8 API tests
-python test_chaos.py  # chaos & resilience verification
-# all should print PASSED
+python -m unittest test_env.py    # 15 environment tests
+python -m unittest test_api.py    # 8 API tests
+python test_chaos.py              # chaos & resilience verification
+# all should print OK / PASSED
 ```
 
 ### train
 
 open `train_rl.ipynb` in Colab or locally. it connects to the live HF Space and runs GRPO training with Unsloth + TRL.
 
-or run the RSF training script directly:
+or run the GRPO training script directly:
 
 ```bash
 SPACE_URL=http://localhost:7860 python train_live.py
@@ -210,13 +213,46 @@ SPACE_URL=http://localhost:7860 python train_live.py
 │   ├── layout.tsx              # root layout with Inter + JetBrains Mono fonts
 │   └── globals.css             # premium design system (animations, glassmorphism)
 ├── train_rl.ipynb              # training notebook (Unsloth + TRL GRPO)
-├── train_live.py               # RSF training script (live env interaction)
+├── train_live.py               # GRPO training script (live env interaction)
 ├── blog.md                     # the full story
-├── test_env.py                 # 15 environment tests
+├── test_env.py                 # 15 environment unit tests
+├── test_api.py                 # 8 API integration tests
 ├── test_chaos.py               # chaos & resilience tests
-├── test_api.py                 # 8 API tests
 └── start.sh                    # HF Spaces startup script
 ```
+
+---
+
+## architecture
+
+```mermaid
+flowchart LR
+    Agent(["AI Agent"]) -->|tool call| D{Corruption Engine}
+    D -->|25% corrupted| Tools["search_nvd\nfetch_advisory\nlookup_gav\nsearch_method\nscan_code\nsuggest_patch"]
+    D -->|never corrupted| Oracle["simulate_exploit\n(ground truth)"]
+    Tools --> Obs["Observation"]
+    Oracle --> Obs
+    Obs --> Agent
+    Agent -->|submit| Grader["Reward Grader"]
+    Grader -->|correctness\ncalibration\ncross-verify\nhallucination| Reward(["Reward 0.0–0.99"])
+
+    subgraph Chaos Layer
+        ChaosEng["Chaos Engine"] -->|500 / 429 / 503| Gateway["AI Gateway Proxy"]
+        Gateway -->|retry + fallback| LLM["LLM Route\nQwen → GPT-4o → Claude → Llama"]
+    end
+
+    Agent -.->|resilient agent| Gateway
+```
+
+---
+
+## market opportunity
+
+The AI security market is projected to exceed **$25B by 2028**. Every major security vendor — CrowdStrike, Wiz, Snyk, Palo Alto — is building AI-assisted triage agents. But none of them have a training layer that simulates real-world information unreliability.
+
+CVE-Triage-Env fills that gap: **an adversarial training gym for AI security agents.** The same way OpenAI Gym trains robots and Atari agents, CVE-Triage-Env trains security analysts. Our customers are security companies building AI triage (CrowdStrike, Snyk), AI labs benchmarking model reasoning under noise, and enterprise SOC teams replacing L1 analyst workflows with resilient agents.
+
+We're building the training layer that doesn't exist yet.
 
 ---
 

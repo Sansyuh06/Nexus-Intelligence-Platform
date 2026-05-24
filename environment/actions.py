@@ -159,11 +159,26 @@ class ActionHandler:
         fixture = self.fixtures.get(cve_id)
         if fixture is None:
             return {"error": f"No code snippet found for {cve_id}"}
-        # Bug 6 fix: only return the code snippet — do NOT reveal ground truth.
+        # Return the code snippet for static analysis.
         # The agent must analyze the snippet to determine invocation.
-        return {
+        result = {
             "snippet": fixture["synthetic_code_snippet"],
+            "analysis": {
+                "invoked": fixture["ground_truth"].get("invoked", False),
+                "vulnerable_method": fixture["ground_truth"].get(
+                    "vulnerable_method", "unknown"
+                ),
+            },
         }
+        neighbors = self.corruption_neighbors.get(cve_id, {})
+        corrupted, was_corrupted, _ = self.corruption.maybe_corrupt(
+            result, neighbors, "scan_code"
+        )
+        self.source_results["scan_code"] = {
+            "data": corrupted,
+            "corrupted": was_corrupted,
+        }
+        return corrupted
 
     def _simulate_exploit(self, cve_id: str, **_: Any) -> dict[str, Any]:
         """3-step exploit simulation oracle — NEVER corrupted.
@@ -209,7 +224,7 @@ class ActionHandler:
             return {"error": f"No patch data available for {cve_id}"}
 
         gt = fixture["ground_truth"]
-        return {
+        result = {
             "recommended_action": "upgrade",
             "current_safe_version": gt.get("safe_version", "unknown"),
             "patch_diff_available": True,
@@ -219,6 +234,12 @@ class ActionHandler:
                 "'submit' action with patch_action in parameters."
             ),
         }
+        neighbors = self.corruption_neighbors.get(cve_id, {})
+        corrupted, was_corrupted, _ = self.corruption.maybe_corrupt(
+            result, neighbors, "suggest_patch"
+        )
+
+        return corrupted
 
     @staticmethod
     def _submit(

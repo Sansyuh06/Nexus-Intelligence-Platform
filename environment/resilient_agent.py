@@ -13,7 +13,7 @@ import json
 from typing import Any, Dict, List
 from environment.env import CVETriageEnv
 from environment.models import CVEAction
-from environment.chaos import ChaosEngine, ChaosConfig, MockLLMError
+from environment.chaos import ChaosEngine, ChaosConfig
 from environment.gateway import TrueFoundryAIGateway
 
 SYSTEM_PROMPT = (
