@@ -2,41 +2,41 @@
 
 echo "===== CVE-Triage-Env Startup at $(date) ====="
 
-# Start FastAPI first (training needs it running)
+# Start FastAPI backend on port 7860
 echo "Starting FastAPI on port 7860..."
 python3 -m uvicorn server.app:app --host 0.0.0.0 --port 7860 &
 FASTAPI_PID=$!
 echo "FastAPI PID: $FASTAPI_PID"
 
-# Wait briefly for FastAPI to bind
-sleep 8
+# Wait for FastAPI to bind
+sleep 5
 
 if ! kill -0 $FASTAPI_PID 2>/dev/null; then
     echo "ERROR: FastAPI failed to start"
     exit 1
 fi
-echo "FastAPI is running."
+echo "FastAPI is running on :7860"
 
-# Start Next.js on the public port
-echo "Starting Next.js on port ${PORT:-8000}..."
-npx next start -H 0.0.0.0 -p ${PORT:-8000} &
+# Start Next.js dev server on port 3000
+echo "Starting Next.js on port 3000..."
+npm run dev -- -p 3000 &
 NEXTJS_PID=$!
 echo "Next.js PID: $NEXTJS_PID"
 
-# Start training if GPU is available and model doesn't exist yet
-if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
-    echo "GPU detected: $(nvidia-smi --query-gpu=name --format=csv,noheader)"
-    if [ ! -f "./cve_triage_model/config.json" ]; then
-        echo "Starting RSF training pipeline against live environment..."
-        python3 train_live.py &
-        TRAIN_PID=$!
-        echo "Training PID: $TRAIN_PID"
-    else
-        echo "Trained model already exists, skipping training."
-    fi
-else
-    echo "No GPU detected — running in inference-only mode."
-fi
+# Trap to clean up both processes on exit
+cleanup() {
+    echo "Shutting down..."
+    kill $FASTAPI_PID 2>/dev/null
+    kill $NEXTJS_PID 2>/dev/null
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
 
-# Keep container alive waiting for FastAPI
-wait $FASTAPI_PID
+echo ""
+echo "===== Both services running ====="
+echo "  Backend:  http://localhost:7860"
+echo "  Frontend: http://localhost:3000"
+echo "================================="
+
+# Keep alive — wait for either to exit
+wait -n $FASTAPI_PID $NEXTJS_PID

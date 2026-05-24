@@ -199,14 +199,26 @@ async def health_check() -> HealthResponse:
 
 @app.post("/resilience/run")
 async def run_resilience_simulation(body: ResilienceRunRequest) -> dict[str, Any]:
-    """Execute a simulated agent run under configured chaos settings."""
+    """Run both naive and resilient agents under the same chaos settings.
+
+    Returns a combined result with both agent traces so the frontend
+    can render a side-by-side comparison from a single API call.
+    """
     try:
-        result = run_agent_simulation(
+        naive_result = run_agent_simulation(
             task_id=body.task_id,
             chaos_config=body.chaos_config,
-            use_resilience=body.use_resilience,
+            use_resilience=False,
         )
-        return result
+        resilient_result = run_agent_simulation(
+            task_id=body.task_id,
+            chaos_config=body.chaos_config,
+            use_resilience=True,
+        )
+        return {
+            "naive": naive_result,
+            "resilient": resilient_result,
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

@@ -10,12 +10,18 @@ type StepEntry = {
   corrupted: boolean;
   observation: Record<string, any>;
   breakdown: Record<string, number>;
+  rawOutput: Record<string, any>;
 };
 
 type EpisodeState = "idle" | "running" | "done";
 
+type ConflictInfo = {
+  field: string;
+  values: { tool: string; value: string }[];
+};
+
 // ─── Constants ───────────────────────────────────────────────────
-const API = ""; // same origin
+const API = ""; // same origin — Next.js rewrites proxy to FastAPI
 const ACTIONS = [
   { id: "search_nvd", label: "Search NVD", icon: "🔍", desc: "Query vulnerability database" },
   { id: "fetch_advisory", label: "Fetch Advisory", icon: "📋", desc: "Fetch vendor security advisory" },
@@ -27,19 +33,65 @@ const ACTIONS = [
 ];
 
 const TASKS = [
-  { id: "easy", label: "Easy", cve: "CVE-2022-42889", color: "from-emerald-500 to-green-600", accent: "#34d399" },
-  { id: "medium", label: "Medium", cve: "CVE-2021-44228", color: "from-amber-500 to-orange-600", accent: "#fbbf24" },
-  { id: "hard", label: "Hard", cve: "CVE-2022-22965", color: "from-red-500 to-rose-600", accent: "#f87171" },
-  { id: "expert", label: "Expert", cve: "CVE-2021-42550", color: "from-purple-500 to-violet-600", accent: "#a855f7" },
+  { id: "easy", label: "Easy", cve: "CVE-2022-42889", name: "GAV Extraction", color: "from-emerald-500 to-green-600", accent: "#34d399" },
+  { id: "medium", label: "Medium", cve: "CVE-2021-44228", name: "Method Discovery", color: "from-amber-500 to-orange-600", accent: "#fbbf24" },
+  { id: "hard", label: "Hard", cve: "CVE-2022-22965", name: "Invocation Check", color: "from-red-500 to-rose-600", accent: "#f87171" },
+  { id: "expert", label: "Expert", cve: "CVE-2021-42550", name: "Full Investigation", color: "from-purple-500 to-violet-600", accent: "#a855f7" },
 ];
 
 const PRESETS = [
-  { label: "Healthy Server", llm: 0.0, rate: 0.0, tool: 0.0, desc: "Clean infrastructure — no injected failures", icon: "🟢" },
+  { label: "No Chaos", llm: 0.0, rate: 0.0, tool: 0.0, desc: "Clean infrastructure — no injected failures", icon: "🟢" },
+  { label: "Light Chaos", llm: 0.15, rate: 0.2, tool: 0.1, desc: "Mild intermittent failures", icon: "🌤️" },
   { label: "LLM Brownout", llm: 0.45, rate: 0.0, tool: 0.0, desc: "Frequent LLM server 500 timeout errors", icon: "🌩️" },
   { label: "Rate Limit Storm", llm: 0.0, rate: 0.6, tool: 0.0, desc: "Heavy 429 Too Many Requests errors", icon: "⚡" },
   { label: "MCP Tool Outage", llm: 0.0, rate: 0.0, tool: 0.5, desc: "Vulnerability search servers returning 503", icon: "🔌" },
   { label: "Complete Chaos", llm: 0.35, rate: 0.5, tool: 0.4, desc: "Maximum failure rate across all components", icon: "💥" },
 ];
+
+// ─── Conflict Detection ──────────────────────────────────────────
+function detectConflicts(steps: StepEntry[]): ConflictInfo[] {
+  const fieldValues: Record<string, { tool: string; value: string }[]> = {};
+  const trackFields = ["safe_version", "artifact", "group", "vulnerable_method"];
+
+  for (const step of steps) {
+    if (step.action === "submit" || step.action === "simulate_exploit") continue;
+    const output = step.rawOutput || step.observation?.current_output || {};
+    for (const field of trackFields) {
+      const val = deepExtract(output, field);
+      if (val) {
+        if (!fieldValues[field]) fieldValues[field] = [];
+        fieldValues[field].push({ tool: step.action, value: String(val) });
+      }
+    }
+  }
+
+  const conflicts: ConflictInfo[] = [];
+  for (const [field, entries] of Object.entries(fieldValues)) {
+    const uniqueValues = new Set(entries.map((e) => e.value));
+    if (uniqueValues.size > 1) {
+      conflicts.push({ field, values: entries });
+    }
+  }
+  return conflicts;
+}
+
+function deepExtract(obj: any, key: string): string | null {
+  if (!obj || typeof obj !== "object") return null;
+  if (key in obj) return String(obj[key]);
+  // Check affected_package for group/artifact
+  if ("affected_package" in obj && typeof obj.affected_package === "string" && obj.affected_package.includes(":")) {
+    const parts = obj.affected_package.split(":");
+    if (key === "group" && parts.length >= 1) return parts[0];
+    if (key === "artifact" && parts.length >= 2) return parts[1];
+  }
+  for (const val of Object.values(obj)) {
+    if (typeof val === "object" && val !== null) {
+      const found = deepExtract(val, key);
+      if (found) return found;
+    }
+  }
+  return null;
+}
 
 // ─── Animated Number Component ───────────────────────────────
 function AnimatedNumber({ value, decimals = 0, duration = 600 }: { value: number; decimals?: number; duration?: number }) {
@@ -54,7 +106,7 @@ function AnimatedNumber({ value, decimals = 0, duration = 600 }: { value: number
     const tick = (now: number) => {
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
       setDisplay(start + (end - start) * eased);
       if (progress < 1) requestAnimationFrame(tick);
     };
@@ -101,10 +153,11 @@ export default function Home() {
   const [totalReward, setTotalReward] = useState(0);
   const [submitParams, setSubmitParams] = useState({
     group: "", artifact: "", safe_version: "", vulnerable_method: "",
-    confidence: "0.75",
+    invoked: "", patch_action: "", confidence: "0.75",
   });
   const [showSubmit, setShowSubmit] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflicts, setConflicts] = useState<ConflictInfo[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
 
   // Resilience Sim State
@@ -140,8 +193,13 @@ export default function Home() {
       setSteps([]);
       setCorruptionCount(0);
       setTotalReward(0);
+      setConflicts([]);
       setState("running");
       setShowSubmit(false);
+      setSubmitParams({
+        group: "", artifact: "", safe_version: "", vulnerable_method: "",
+        invoked: "", patch_action: "", confidence: "0.75",
+      });
     } catch (err: any) {
       setError(err.message);
     }
@@ -174,10 +232,17 @@ export default function Home() {
         corrupted: wasCorrupted,
         observation: data.observation,
         breakdown: data.reward.breakdown || {},
+        rawOutput: data.observation?.current_output || {},
       };
-      setSteps((s) => [...s, entry]);
+
+      const newSteps = [...steps, entry];
+      setSteps(newSteps);
       setObs(data.observation);
       setTotalReward(data.reward.value);
+
+      // Detect conflicts between tool outputs
+      const newConflicts = detectConflicts(newSteps);
+      setConflicts(newConflicts);
 
       if (data.done) setState("done");
     } catch (err: any) {
@@ -191,42 +256,30 @@ export default function Home() {
     if (submitParams.artifact) params.artifact = submitParams.artifact;
     if (submitParams.safe_version) params.safe_version = submitParams.safe_version;
     if (submitParams.vulnerable_method) params.vulnerable_method = submitParams.vulnerable_method;
+    if (submitParams.invoked) params.invoked = submitParams.invoked === "true";
+    if (submitParams.patch_action) params.patch_action = submitParams.patch_action;
     params.confidence = parseFloat(submitParams.confidence) || 0.5;
     stepEnv("submit", params);
     setShowSubmit(false);
   };
 
-  // ── API Calls (Resilience Sim) ────────────────────────────────
+  // ── API Calls (Resilience Sim) — Single call runs both agents ──
   const runSimulation = async () => {
     setLoadingSim(true);
     setSimError(null);
     setSimResults(null);
     try {
-      const naiveRes = await fetch(`${API}/resilience/run`, {
+      const res = await fetch(`${API}/resilience/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           task_id: resilienceTask.id,
           chaos_config: chaosConfig,
-          use_resilience: false,
         }),
       });
-      if (!naiveRes.ok) throw new Error(`Naive Simulation failed: ${naiveRes.status}`);
-      const naiveData = await naiveRes.json();
-
-      const resilientRes = await fetch(`${API}/resilience/run`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          task_id: resilienceTask.id,
-          chaos_config: chaosConfig,
-          use_resilience: true,
-        }),
-      });
-      if (!resilientRes.ok) throw new Error(`Resilient Simulation failed: ${resilientRes.status}`);
-      const resilientData = await resilientRes.json();
-
-      setSimResults({ naive: naiveData, resilient: resilientData });
+      if (!res.ok) throw new Error(`Simulation failed: ${res.status}`);
+      const data = await res.json();
+      setSimResults({ naive: data.naive, resilient: data.resilient });
     } catch (err: any) {
       setSimError(err.message);
     } finally {
@@ -242,12 +295,16 @@ export default function Home() {
     });
   }, []);
 
+  // Helper: which submit fields to show based on difficulty
+  const showInvoked = task.id === "hard" || task.id === "expert";
+  const showPatchAction = task.id === "expert";
+
   // ── Render ───────────────────────────────────────────────────
   return (
     <main className="min-h-screen text-gray-100 selection:bg-purple-500/30" style={{ background: "var(--bg-void)" }}>
 
       {/* ══════════════════════════════════════════════════════════
-          HEADER — Sticky tabbed nav with animated underline
+          HEADER — Sticky tabbed nav
           ══════════════════════════════════════════════════════════ */}
       <div className="glass-strong sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
@@ -257,7 +314,7 @@ export default function Home() {
               N
             </div>
             <span className="text-lg font-extrabold tracking-tight text-gradient-purple-cyan">
-              Nexus CVE Suite
+              CVE-Triage-Env
             </span>
           </div>
 
@@ -265,7 +322,7 @@ export default function Home() {
           <div className="flex relative">
             {[
               { key: "triage" as const, label: "CVE Triage Sandbox", icon: "🔍" },
-              { key: "resilience" as const, label: "Resilience Simulator", icon: "🛡️" },
+              { key: "resilience" as const, label: "Resilience Battle Arena", icon: "🛡️" },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -295,7 +352,6 @@ export default function Home() {
 
           {/* ── Hero ── */}
           <div className="relative overflow-hidden" style={{ background: "var(--bg-deep)" }}>
-            {/* Animated blobs */}
             <div className="blob-purple" style={{ top: "-100px", left: "10%", opacity: 0.5 }} />
             <div className="blob-cyan" style={{ top: "-50px", right: "15%", opacity: 0.4 }} />
 
@@ -325,7 +381,7 @@ export default function Home() {
                 <button
                   key={t.id}
                   id={`task-${t.id}`}
-                  onClick={() => { setTask(t); setState("idle"); setSteps([]); setObs(null); }}
+                  onClick={() => { setTask(t); setState("idle"); setSteps([]); setObs(null); setConflicts([]); }}
                   className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border card-hover-lift ${
                     task.id === t.id
                       ? `bg-gradient-to-r ${t.color} text-white border-transparent shadow-lg`
@@ -356,14 +412,45 @@ export default function Home() {
               </div>
             )}
 
+            {/* ── Conflict Warning Banner ── */}
+            {conflicts.length > 0 && state === "running" && (
+              <div className="p-4 rounded-xl animate-fade-in-up" style={{ background: "rgba(251, 191, 36, 0.06)", border: "1px solid rgba(251, 191, 36, 0.2)" }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-amber-400 text-sm font-bold">⚠️ Source Conflict Detected</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider"
+                        style={{ background: "rgba(251, 191, 36, 0.12)", color: "var(--accent-amber)", border: "1px solid rgba(251, 191, 36, 0.25)" }}>
+                    CORRUPTED?
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {conflicts.map((c) => (
+                    <div key={c.field} className="text-xs text-gray-400">
+                      <span className="text-amber-300 font-semibold">{c.field.replace(/_/g, " ")}:</span>{" "}
+                      {c.values.map((v, i) => (
+                        <span key={i}>
+                          <span className="text-gray-500">{v.tool}</span>{" "}
+                          <span style={{ fontFamily: "var(--font-mono)" }} className="text-amber-200">→ {v.value}</span>
+                          {i < c.values.length - 1 && <span className="text-gray-700 mx-1">vs</span>}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                  <p className="text-[10px] text-gray-600 mt-1">
+                    Use <span className="text-emerald-400 font-bold">simulate_exploit</span> (ground truth oracle) to verify which data is correct.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* ── Stats Bar ── */}
             {state !== "idle" && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 animate-fade-in-up">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 animate-fade-in-up">
                 {[
                   { label: "Steps", value: steps.length, color: "text-white", glow: "" },
                   { label: "Reward", value: totalReward, color: totalReward > 0.7 ? "text-emerald-400" : totalReward > 0.3 ? "text-amber-400" : "text-red-400", glow: "", isDecimal: true },
                   { label: "Corruptions", value: corruptionCount, color: corruptionCount > 0 ? "text-red-400" : "text-emerald-400", glow: corruptionCount > 0 ? "0 0 20px rgba(248,113,113,0.08)" : "" },
                   { label: "Sources", value: obs?.sources_consulted?.length || 0, color: "text-cyan-400", glow: "" },
+                  { label: "Conflicts", value: conflicts.length, color: conflicts.length > 0 ? "text-amber-400" : "text-emerald-400", glow: conflicts.length > 0 ? "0 0 20px rgba(251,191,36,0.08)" : "" },
                 ].map((s) => (
                   <div key={s.label} className="glass rounded-xl p-4 text-center card-hover-lift" style={s.glow ? { boxShadow: s.glow } : {}}>
                     <div className={`text-2xl font-black ${s.color}`} style={{ fontFamily: "var(--font-mono)" }}>
@@ -438,7 +525,7 @@ export default function Home() {
                         <input
                           key={field}
                           id={`submit-${field}`}
-                          placeholder={field.replace("_", " ")}
+                          placeholder={field.replace(/_/g, " ")}
                           value={(submitParams as any)[field]}
                           onChange={(e) => setSubmitParams({ ...submitParams, [field]: e.target.value })}
                           className="w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none transition-colors"
@@ -450,6 +537,51 @@ export default function Home() {
                           onBlur={(e) => (e.target.style.borderColor = "var(--border-default)")}
                         />
                       ))}
+
+                      {/* Invoked field (hard/expert only) */}
+                      {showInvoked && (
+                        <div>
+                          <label className="text-[11px] text-gray-500 font-semibold block mb-1">Method Invoked?</label>
+                          <select
+                            id="submit-invoked"
+                            value={submitParams.invoked}
+                            onChange={(e) => setSubmitParams({ ...submitParams, invoked: e.target.value })}
+                            className="w-full rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none transition-colors"
+                            style={{
+                              background: "var(--bg-void)",
+                              border: "1px solid var(--border-default)",
+                            }}
+                          >
+                            <option value="">Select...</option>
+                            <option value="true">Yes — method is invoked</option>
+                            <option value="false">No — method is NOT invoked</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Patch action (expert only) */}
+                      {showPatchAction && (
+                        <div>
+                          <label className="text-[11px] text-gray-500 font-semibold block mb-1">Remediation Action</label>
+                          <select
+                            id="submit-patch-action"
+                            value={submitParams.patch_action}
+                            onChange={(e) => setSubmitParams({ ...submitParams, patch_action: e.target.value })}
+                            className="w-full rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none transition-colors"
+                            style={{
+                              background: "var(--bg-void)",
+                              border: "1px solid var(--border-default)",
+                            }}
+                          >
+                            <option value="">Select...</option>
+                            <option value="upgrade">Upgrade dependency</option>
+                            <option value="patch">Apply security patch</option>
+                            <option value="mitigate">Apply workaround/mitigation</option>
+                            <option value="remove">Remove dependency</option>
+                          </select>
+                        </div>
+                      )}
+
                       <div>
                         <label className="text-[11px] text-gray-500 font-semibold">Confidence: {submitParams.confidence}</label>
                         <input
@@ -458,6 +590,10 @@ export default function Home() {
                           onChange={(e) => setSubmitParams({ ...submitParams, confidence: e.target.value })}
                           className="w-full mt-1"
                         />
+                        <div className="flex justify-between text-[9px] text-gray-700 mt-0.5">
+                          <span>Uncertain (0.0)</span>
+                          <span>Confident (1.0)</span>
+                        </div>
                       </div>
                       <button
                         id="submit-grading-btn"
@@ -524,7 +660,7 @@ export default function Home() {
                           </span>
                         </div>
                         <pre className="text-gray-500 whitespace-pre-wrap break-all text-[11px] leading-relaxed mt-1" style={{ fontFamily: "var(--font-mono)" }}>
-                          {JSON.stringify(s.observation.current_output || {}, null, 2).slice(0, 600)}
+                          {JSON.stringify(s.observation.current_output || s.rawOutput || {}, null, 2).slice(0, 600)}
                         </pre>
                       </div>
                     ))}
@@ -598,14 +734,13 @@ export default function Home() {
       )}
 
       {/* ══════════════════════════════════════════════════════════
-          TAB 2: TRUEFOUNDRY RESILIENCE SIMULATOR
+          TAB 2: RESILIENCE BATTLE ARENA
           ══════════════════════════════════════════════════════════ */}
       {activeTab === "resilience" && (
         <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 animate-fade-in">
 
           {/* ── Hero Header ── */}
           <div className="relative p-8 rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(34, 211, 238, 0.12)" }}>
-            {/* Background blobs */}
             <div className="blob-cyan" style={{ top: "-120px", right: "-50px", opacity: 0.3 }} />
             <div className="blob-purple" style={{ bottom: "-150px", left: "-80px", opacity: 0.2 }} />
 
@@ -614,7 +749,7 @@ export default function Home() {
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.15em] mb-3"
                      style={{ background: "rgba(34, 211, 238, 0.08)", border: "1px solid rgba(34, 211, 238, 0.15)", color: "var(--accent-cyan)" }}>
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                  TrueFoundry Resilient Agents Challenge
+                  Resilience Battle Arena
                 </div>
                 <h2 className="text-2xl md:text-3xl font-black text-white mb-2">
                   Infrastructure Chaos Simulator
@@ -735,7 +870,7 @@ export default function Home() {
                     Running Simulation...
                   </>
                 ) : (
-                  <>💥 Run Comparison under Chaos</>
+                  <>💥 Run Battle Simulation</>
                 )}
               </button>
 
@@ -838,7 +973,7 @@ export default function Home() {
                           background: simResults.naive.success ? "rgba(52, 211, 153, 0.08)" : "rgba(248, 113, 113, 0.08)",
                           border: `1px solid ${simResults.naive.success ? "rgba(52, 211, 153, 0.2)" : "rgba(248, 113, 113, 0.2)"}`,
                         }}>
-                          {simResults.naive.success ? "✓ Success" : "✗ Failed"}
+                          {simResults.naive.success ? "✓ Survived" : "✗ Crashed"}
                         </span>
                       </div>
 
@@ -846,7 +981,7 @@ export default function Home() {
                       <div className="grid grid-cols-3 text-center p-3" style={{ background: "var(--bg-void)", borderBottom: "1px solid var(--border-subtle)" }}>
                         {[
                           { label: "LLM Calls", value: simResults.naive.stats.llm_calls, color: "text-white" },
-                          { label: "Failures", value: simResults.naive.stats.failed_llm_calls, color: "text-red-400" },
+                          { label: "Failures", value: simResults.naive.stats.failed_llm_calls + simResults.naive.stats.failed_tool_calls, color: "text-red-400" },
                           { label: "Reward", value: simResults.naive.final_reward.toFixed(2), color: "text-white" },
                         ].map((s) => (
                           <div key={s.label}>
@@ -898,7 +1033,7 @@ export default function Home() {
                           background: simResults.resilient.success ? "rgba(52, 211, 153, 0.08)" : "rgba(248, 113, 113, 0.08)",
                           border: `1px solid ${simResults.resilient.success ? "rgba(52, 211, 153, 0.2)" : "rgba(248, 113, 113, 0.2)"}`,
                         }}>
-                          {simResults.resilient.success ? "✓ Success" : "✗ Failed"}
+                          {simResults.resilient.success ? "✓ Survived" : "✗ Failed"}
                         </span>
                       </div>
 
@@ -958,7 +1093,7 @@ export default function Home() {
                             } else {
                               const g = log.data;
                               const isFailure = g.status === "failed" || g.status === "retry";
-                              const isFallback = g.status === "routing_fallback";
+                              const isFallback = g.status === "routing_fallback" || g.status === "fallback";
                               return (
                                 <div
                                   key={`gw-${idx}`}
