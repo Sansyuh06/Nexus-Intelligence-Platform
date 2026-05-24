@@ -173,10 +173,8 @@ curl -X POST http://localhost:7860/step -H "Content-Type: application/json" -d '
 ### run tests
 
 ```bash
-python test_env.py    # 15 environment tests
-python test_api.py    # 8 API tests
 python test_chaos.py  # chaos & resilience verification
-# all should print PASSED
+# should print PASSED
 ```
 
 ### train
@@ -212,9 +210,7 @@ SPACE_URL=http://localhost:7860 python train_live.py
 ├── train_rl.ipynb              # training notebook (Unsloth + TRL GRPO)
 ├── train_live.py               # RSF training script (live env interaction)
 ├── blog.md                     # the full story
-├── test_env.py                 # 15 environment tests
 ├── test_chaos.py               # chaos & resilience tests
-├── test_api.py                 # 8 API tests
 └── start.sh                    # HF Spaces startup script
 ```
 

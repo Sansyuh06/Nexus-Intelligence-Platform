@@ -238,10 +238,7 @@ class ActionHandler:
         corrupted, was_corrupted, _ = self.corruption.maybe_corrupt(
             result, neighbors, "suggest_patch"
         )
-        self.source_results["suggest_patch"] = {
-            "data": corrupted,
-            "corrupted": was_corrupted,
-        }
+
         return corrupted
 
     @staticmethod

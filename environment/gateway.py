@@ -12,7 +12,7 @@ import os
 import time
 from typing import Any, List, Dict
 from openai import OpenAI
-from environment.chaos import ChaosEngine, MockLLMError
+from environment.chaos import ChaosEngine
 
 
 class TrueFoundryAIGateway:
@@ -149,19 +149,6 @@ class TrueFoundryAIGateway:
             
             # If resilience is disabled, fail immediately
             if not use_resilience:
-                # If we get an auth error or API error, fall back to local mock completion
-                # so the simulation runs successfully without requiring valid credentials
-                if "401" in str(last_error) or "auth" in str(last_error).lower() or "credentials" in str(last_error).lower():
-                    self.audit_logs.append({
-                        "timestamp": time.time(),
-                        "model_requested": self.primary_model,
-                        "model_used": "local-fallback-engine",
-                        "status": "fallback",
-                        "attempts": 1,
-                        "duration": 0.05,
-                        "details": f"Credentials issue detected: falling back to local fallback engine"
-                    })
-                    return self._get_local_mock_response(messages)
                 raise last_error
                 
             # Log fallback event

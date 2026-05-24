@@ -2,9 +2,9 @@
 
 echo "===== CVE-Triage-Env Startup at $(date) ====="
 
-# Start FastAPI backend on port 7860
-echo "Starting FastAPI on port 7860..."
-python3 -m uvicorn server.app:app --host 0.0.0.0 --port 7860 &
+# Start FastAPI backend
+echo "Starting FastAPI on port ${PORT:-7860}..."
+python3 -m uvicorn server.app:app --host 0.0.0.0 --port ${PORT:-7860} &
 FASTAPI_PID=$!
 echo "FastAPI PID: $FASTAPI_PID"
 
@@ -15,11 +15,11 @@ if ! kill -0 $FASTAPI_PID 2>/dev/null; then
     echo "ERROR: FastAPI failed to start"
     exit 1
 fi
-echo "FastAPI is running on :7860"
+echo "FastAPI is running on :${PORT:-7860}"
 
-# Start Next.js dev server on port 3000
+# Start Next.js server on port 3000
 echo "Starting Next.js on port 3000..."
-npm run dev -- -p 3000 &
+npm start -- -p 3000 &
 NEXTJS_PID=$!
 echo "Next.js PID: $NEXTJS_PID"
 
@@ -34,7 +34,7 @@ trap cleanup SIGINT SIGTERM
 
 echo ""
 echo "===== Both services running ====="
-echo "  Backend:  http://localhost:7860"
+echo "  Backend:  http://localhost:${PORT:-7860}"
 echo "  Frontend: http://localhost:3000"
 echo "================================="
 
