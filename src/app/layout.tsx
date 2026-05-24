@@ -1,20 +1,29 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "CVE-Triage-Env — Adversarial Security Reasoning",
-  description: "An RL environment training AI agents to investigate CVEs under unreliable information conditions. Meta OpenEnv Hackathon 2026.",
+  title: "CVE-Triage-Env — Resilient AI Agent Security Triage",
+  description:
+    "An adversarial RL environment training AI agents to investigate CVEs under unreliable information, featuring TrueFoundry AI Gateway resilience simulation. DevNetwork [AI + ML] Hackathon 2026.",
+  openGraph: {
+    title: "CVE-Triage-Env — Resilient AI Security Triage",
+    description:
+      "Train AI agents to survive unreliable tool outputs and infrastructure chaos. Built for DevNetwork AI+ML Hackathon 2026.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -25,9 +34,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col bg-[#0a0a0f]">{children}</body>
+      <body className="min-h-full flex flex-col" style={{ fontFamily: "var(--font-sans)" }}>
+        {children}
+      </body>
     </html>
   );
 }
