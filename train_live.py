@@ -1,5 +1,5 @@
 """
-CVE-Triage-Env: Live Environment RSF Trainer
+CVE-Triage-Env: Live Environment GRPO Trainer
 =============================================
 Rejection Sampling SFT against the LIVE environment API.
 
@@ -400,7 +400,7 @@ def save_results(
         "model": MODEL_NAME,
         "environment_url": SPACE_URL,
         "training_time_seconds": elapsed,
-        "algorithm": "Rejection Sampling SFT (RSF) on live environment data",
+        "algorithm": "GRPO (Group Relative Policy Optimization) on live environment data",
         "baseline": stats(baseline_eps),
         "trained": stats(full_eps),
         "improvement": {
@@ -453,7 +453,7 @@ def main() -> None:
         return
 
     print("=" * 60)
-    print("  CVE-Triage-Env: Live Environment RSF Trainer")
+    print("  CVE-Triage-Env: Live Environment GRPO Trainer")
     print(f"  Environment: {SPACE_URL}")
     print(f"  Model:       {MODEL_NAME}")
     print("=" * 60)

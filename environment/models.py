@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CVEObservation(BaseModel):
@@ -67,10 +67,7 @@ class CVEReward(BaseModel):
     breakdown: dict[str, float] = Field(default_factory=dict)
     message: str = ""
 
-    @field_validator("value", mode="before")
-    @classmethod
-    def clamp_value(cls, v: float) -> float:
-        return min(1.0, max(0.0, float(v)))
+
 
 
 class TaskConfig(BaseModel):
