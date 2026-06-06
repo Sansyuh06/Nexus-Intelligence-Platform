@@ -24,10 +24,10 @@ COPY . .
 # Build Next.js for production
 RUN npm run build
 
-# OpenEnv declares port 8000 in openenv.yaml — match it here
-ENV PORT=8000
+# FastAPI backend port — must match next.config.ts proxy target (7860)
+ENV PORT=7860
 ENV HOSTNAME="0.0.0.0"
-EXPOSE 8000
+EXPOSE 7860
 
 # Start both FastAPI and Next.js via start.sh
 CMD ["bash", "start.sh"]

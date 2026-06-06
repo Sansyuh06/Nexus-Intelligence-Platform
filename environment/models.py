@@ -63,7 +63,7 @@ class CVEReward(BaseModel):
 
     model_config = ConfigDict(strict=False)
 
-    value: float = Field(ge=0.0, le=1.0, default=0.01)
+    value: float = Field(ge=-1.0, le=2.0, default=0.01)
     breakdown: dict[str, float] = Field(default_factory=dict)
     message: str = ""
 
