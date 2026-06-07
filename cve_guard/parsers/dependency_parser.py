@@ -30,7 +30,7 @@ class DependencyParser:
         
         # Let's just use regex to find versions that were added.
         # This is a naive implementation suitable for the hackathon demo.
-        pattern = r"<groupId>([^<]+)</groupId>\s*<artifactId>([^<]+)</artifactId>\s*<version>([^<]+)</version>"
+        pattern = r"<dependency>.*?<groupId>\s*([^<]+)\s*</groupId>\s*<artifactId>\s*([^<]+)\s*</artifactId>\s*<version>\s*([^<]+)\s*</version>"
         matches = re.finditer(pattern, added_text)
         
         for match in matches:

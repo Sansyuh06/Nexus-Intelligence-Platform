@@ -43,7 +43,7 @@ def wait_for_env(timeout: int = 120) -> bool:
         try:
             r = req.get(f"{SPACE_URL}/health", timeout=5)
             if r.ok:
-                print(f"[train] Environment ready!")
+                print("[train] Environment ready!")
                 return True
         except Exception:
             pass

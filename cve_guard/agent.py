@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import List
 from .sources.cross_validator import CrossValidator
 from .gitlab.mcp_client import GitLabMCPClient
 from .gitlab.commenter import MRCommenter

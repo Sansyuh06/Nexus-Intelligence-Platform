@@ -1,4 +1,3 @@
-from typing import Dict, Any
 from .mcp_client import GitLabMCPClient
 
 class MRCommenter:
