@@ -1,0 +1,45 @@
+# CVE-Guard Demo Repo — GitLab CI Pipeline
+#
+# This pipeline notifies the CVE-Guard webhook when a Merge Request is opened.
+# The webhook auto-triggers the AI agent to scan dependencies and post a verdict.
+#
+# SETUP INSTRUCTIONS:
+# 1. In your GitLab project: Settings > Webhooks
+# 2. Add URL: https://<your-cve-guard-host>/webhook/gitlab
+# 3. Enable "Merge request events"
+# 4. Click "Add webhook"
+#
+# The CI job below is an OPTIONAL redundant trigger (the webhook fires first).
+# It uses curl to ping the webhook from within CI if needed.
+
+stages:
+  - security-scan
+
+variables:
+  CVE_GUARD_WEBHOOK: "${CVE_GUARD_WEBHOOK_URL}"   # Set in GitLab CI/CD > Variables
+
+cve-guard-scan:
+  stage: security-scan
+  image: curlimages/curl:latest
+  rules:
+    # Only run on MR pipelines
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - |
+      echo "CVE-Guard: Triggering automated dependency vulnerability scan..."
+      if [ -n "$CVE_GUARD_WEBHOOK" ]; then
+        curl -s -X POST "$CVE_GUARD_WEBHOOK" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"object_kind\": \"merge_request\",
+            \"project\": {\"id\": \"${CI_PROJECT_ID}\"},
+            \"object_attributes\": {
+              \"iid\": ${CI_MERGE_REQUEST_IID},
+              \"action\": \"update\"
+            }
+          }" || echo "Warning: CVE-Guard webhook call failed (non-blocking)"
+        echo "CVE-Guard: Scan triggered for MR !${CI_MERGE_REQUEST_IID}"
+      else
+        echo "CVE-Guard: Webhook URL not configured (set CVE_GUARD_WEBHOOK_URL in CI/CD variables)"
+      fi
+  allow_failure: true  # Security scan is advisory — never breaks the pipeline itself
