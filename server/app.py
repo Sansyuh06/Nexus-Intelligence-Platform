@@ -4,17 +4,21 @@ CVE-Triage-Env: FastAPI application.
 Exposes the OpenEnv-compliant REST API for the CVE triage environment.
 Runs on an internal port (7860). Next.js on the public port proxies
 API requests here via rewrites().
+
+Also exposes POST /webhook/gitlab for automatic CVE-Guard triggering
+when a GitLab Merge Request is opened or updated.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -24,6 +28,7 @@ from environment.env import CVETriageEnv
 from environment.tasks import TASKS
 from environment.chaos import ChaosConfig
 from environment.resilient_agent import run_agent_simulation
+from cve_guard.agent import CVEGuardAgent
 import json
 import asyncio
 
@@ -270,6 +275,68 @@ async def run_benchmark(body: BenchmarkRequest):
         yield f"data: {json.dumps({'status': 'completed', 'avg_naive': avg_naive, 'avg_resilient': avg_resilient})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# CVE-Guard Webhook
+# ---------------------------------------------------------------------------
+
+def _run_cve_guard(project_id: str, mr_iid: int, pat: str) -> None:
+    """Run CVEGuardAgent in a background thread so the webhook returns fast."""
+    try:
+        logger.info("[webhook] CVE-Guard processing MR !%s on project %s", mr_iid, project_id)
+        agent = CVEGuardAgent(project_id=project_id, pat=pat)
+        agent.process_merge_request(mr_iid)
+        logger.info("[webhook] CVE-Guard completed MR !%s", mr_iid)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("[webhook] CVE-Guard error on MR !%s: %s", mr_iid, exc)
+
+
+@app.post("/webhook/gitlab")
+async def gitlab_webhook(request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    """Receive GitLab system hooks and trigger CVE-Guard automatically.
+
+    Configure your GitLab project webhook to point to:
+      https://<your-host>/webhook/gitlab
+
+    Triggers on: Merge Request Events (open / update / reopen).
+    Returns immediately — the actual scan runs in a background thread.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    object_kind = payload.get("object_kind", "")
+    if object_kind != "merge_request":
+        # Not a merge-request event — acknowledge and ignore
+        return {"status": "ignored", "reason": f"object_kind={object_kind!r} is not merge_request"}
+
+    attrs = payload.get("object_attributes", {})
+    action = attrs.get("action", "")
+    if action not in ("open", "update", "reopen"):
+        return {"status": "ignored", "reason": f"action={action!r} not handled"}
+
+    mr_iid: int = attrs.get("iid", 0)
+    project_id: str = str(payload.get("project", {}).get("id", ""))
+    pat: str = os.environ.get("GITLAB_PAT", "")
+
+    if not project_id or not mr_iid:
+        raise HTTPException(status_code=400, detail="Missing project.id or object_attributes.iid")
+
+    if not pat:
+        logger.warning("[webhook] GITLAB_PAT not set — CVE-Guard will run in mock mode")
+
+    # Fire-and-forget in a background thread
+    background_tasks.add_task(_run_cve_guard, project_id, mr_iid, pat)
+
+    logger.info("[webhook] Accepted MR !%s for project %s — processing in background", mr_iid, project_id)
+    return {
+        "status": "processing",
+        "mr_iid": mr_iid,
+        "project_id": project_id,
+        "message": "CVE-Guard scan queued. Results will be posted as MR comments.",
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -35,19 +35,29 @@ class CVEGuardAgent:
             return
             
         for dep in added_deps:
-            # 2. Cross-verify CVE data
+            # 2. Cross-verify CVE data across all three sources
             cve_data = self.validator.verify_gav(dep['group'], dep['artifact'], dep['version'])
-            
-            # 3. Check for method invocations
+
+            sources_agreeing = cve_data.get("sources_agreeing", 0)
+
+            # 3. Check for method invocations only when >= 2 sources agree
+            #    (CONFLICTING case with 1 source is advisory-only — skip invocation scan)
             invocations = []
-            if cve_data.get("vulnerable"):
+            if cve_data.get("vulnerable") and sources_agreeing >= 2:
                 vuln_method = cve_data.get("vulnerable_method")
-                invocations = self.checker.search_invocations(vuln_method, files_to_scan)
-                
-            # 4. Format Verdict and Post Comment
+                if files_to_scan:
+                    invocations = self.checker.search_invocations(vuln_method, files_to_scan)
+
+            # 4. Format verdict (BLOCK / CONFLICTING / ADVISORY / CLEAR)
             verdict_text = self.formatter.format_verdict(dep, cve_data, invocations)
-            is_blocking = cve_data.get("vulnerable", False) and len(invocations) > 0
-            
+
+            # Only truly block when 2+ sources agree AND invocation confirmed
+            is_blocking = (
+                cve_data.get("vulnerable", False)
+                and sources_agreeing >= 2
+                and len(invocations) > 0
+            )
+
             self.commenter.post_verdict(mr_iid, verdict_text, is_blocking=is_blocking)
-            
+
             print(f"--- Completed MR {mr_iid} ---\n{verdict_text}\n")
